@@ -56,7 +56,7 @@ def extract_audio(path: str, path_out: Optional[str] = None):
     return path_out
 
 
-def save_frames(frames: list[Arr], path_out: str):
+def save_frames(frames: list[Arr], fps: int, path_out: str):
     """Save frames to a video file using ffmpeg"""
 
     height, width, _ = frames[0].shape
@@ -65,7 +65,7 @@ def save_frames(frames: list[Arr], path_out: str):
         format="rawvideo",
         pix_fmt="rgb24",
         s="{}x{}".format(width, height),
-    )
+    ).filter("fps", fps=fps)
 
     output = ffmpeg.output(video, path_out, pix_fmt="yuv420p", vcodec="h264")
     output = ffmpeg.overwrite_output(output)
