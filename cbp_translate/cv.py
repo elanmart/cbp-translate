@@ -1,9 +1,8 @@
 import cv2
 import numpy as np
-
 from unidecode import unidecode
 
-from . import Arr, BGR
+from . import BGR, Arr
 
 
 def add_transparent_rectangle(
@@ -22,7 +21,6 @@ def add_transparent_rectangle(
     out[mask] = cv2.addWeighted(img, alpha, shapes, 1 - alpha, 0)[mask]
 
     return out
-
 
 
 def add_text_to_frame(
