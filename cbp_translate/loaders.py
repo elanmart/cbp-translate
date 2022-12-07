@@ -5,8 +5,7 @@ import cv2
 import ffmpeg
 import numpy as np
 
-Arr = np.ndarray
-
+from . import Arr
 
 def with_suffix(path: str, suffix: str) -> str:
     """
@@ -20,6 +19,7 @@ def with_suffix(path: str, suffix: str) -> str:
 
 
 def load_frames(path: str) -> tuple[list[Arr], int]:
+
     # Open the stream
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
@@ -34,7 +34,7 @@ def load_frames(path: str) -> tuple[list[Arr], int]:
         ret, frame = cap.read()
         if not ret:
             break
-        frames.append(frame)
+        frames.append(frame[..., ::-1])
 
     # Close the stream
     cap.release()
@@ -64,8 +64,9 @@ def save_frames(frames: list[Arr], fps: int, path_out: str):
         "pipe:",
         format="rawvideo",
         pix_fmt="rgb24",
-        s="{}x{}".format(width, height),
-    ).filter("fps", fps=fps)
+        s=f"{width}x{height}",
+        framerate=fps,
+    )
 
     output = ffmpeg.output(video, path_out, pix_fmt="yuv420p", vcodec="h264")
     output = ffmpeg.overwrite_output(output)
