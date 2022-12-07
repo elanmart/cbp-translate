@@ -10,22 +10,22 @@ from retinaface import RetinaFace
 from retinaface.commons import postprocess
 from tensorflow.keras.preprocessing import image  # type: ignore
 
+from . import Arr
 
 @dataclass
 class FaceEmbedding:
     id_: "FaceId"
-    embedding: "Arr"
+    embedding: Arr
     frequency: int = 1
 
 
-Arr = np.ndarray
 FaceId = int
 FaceLocation = tuple[int, int, int, int]
 OnFrameFaces = list[tuple[FaceId, FaceLocation]]
 FaceDB = dict[FaceId, FaceEmbedding]
 
 
-def process_face(img: Arr, target_size: tuple[int, int]):
+def _process_face(img: Arr, target_size: tuple[int, int]):
     """Copied from DeepFace.commons.functions.preprocess_face
     We had to make minor tweaks for our use case.
 
@@ -70,7 +70,7 @@ def process_face(img: Arr, target_size: tuple[int, int]):
     return img_pixels
 
 
-def extract_faces(
+def _extract_faces(
     img_path, threshold=0.9, model=None, align=True, allow_upscaling=True
 ):
     """Copied from retinaface.RetinaFace to return both the image and the facial area.
@@ -138,14 +138,14 @@ def assign_and_localize_faces(frames: list[Arr]) -> tuple[FaceDB, list[OnFrameFa
 
     for frame in frames:
 
-        detected = RetinaFace.extract_faces(frame[..., ::-1], align=True, model=retina)
+        detected = _extract_faces(frame[..., ::-1], align=True, model=retina)
         on_frame = []
 
         for face_img, face_loc in detected:
 
             face_loc = tuple(face_loc)
 
-            face_img = process_face(face_img, target_size)
+            face_img = _process_face(face_img, target_size)
             face_img = functions.normalize_input(face_img, normalization="base")
 
             embedding = model.predict(face_img)[0]
@@ -170,5 +170,12 @@ def postprocess_faces(
     faces = [
         [(key, loc) for key, loc in frame_faces if key in database] for frame_faces in faces
     ]
+
+    return database, faces
+
+
+def extract_faces(frames: list[Arr]) -> tuple[FaceDB, list[OnFrameFaces]]:
+    database, faces = assign_and_localize_faces(frames)
+    database, faces = postprocess_faces(database, faces)
 
     return database, faces
