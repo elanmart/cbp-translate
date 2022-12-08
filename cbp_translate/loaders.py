@@ -46,7 +46,7 @@ def load_frames(path: str) -> tuple[list[Arr], int]:
 def extract_audio(path: str, path_out: Optional[str] = None):
     """Extract audio from a video file using ffmpeg"""
 
-    path_out = path_out or with_suffix(path, ".mp3")
+    path_out = path_out or with_suffix(path, ".wav")
 
     audio = ffmpeg.input(path).audio
     output = ffmpeg.output(audio, path_out)
