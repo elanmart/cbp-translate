@@ -77,7 +77,9 @@ def main(path_in: str, path_out: str, config: Config):
                 if entry.face_loc is not None:
                     frame = add_speaker_marker(frame, entry.face_loc, entry.speaker)
 
-                processed.append(frame)
+            processed.append(frame[..., ::-1])
 
         save_frames(processed, fps, path_video)
         combine_streams(path_video, path_audio, path_out)
+
+    return path_out
