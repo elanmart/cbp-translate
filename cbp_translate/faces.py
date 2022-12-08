@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import cv2
 import numpy as np
@@ -12,6 +13,9 @@ from tensorflow.keras.preprocessing import image  # type: ignore
 
 from . import Arr
 
+FaceId = int
+
+
 @dataclass
 class FaceEmbedding:
     id_: "FaceId"
@@ -19,9 +23,19 @@ class FaceEmbedding:
     frequency: int = 1
 
 
-FaceId = int
-FaceLocation = tuple[int, int, int, int]
-OnFrameFaces = list[tuple[FaceId, FaceLocation]]
+class FaceLocation(NamedTuple):
+    x0: int
+    y0: int
+    x1: int
+    y1: int
+
+
+class Face(NamedTuple):
+    id_: FaceId
+    location: FaceLocation
+
+
+OnFrameFaces = list[Face]
 FaceDB = dict[FaceId, FaceEmbedding]
 
 
@@ -143,7 +157,7 @@ def assign_and_localize_faces(frames: list[Arr]) -> tuple[FaceDB, list[OnFrameFa
 
         for face_img, face_loc in detected:
 
-            face_loc = tuple(face_loc)
+            face_loc = FaceLocation(*face_loc)
 
             face_img = _process_face(face_img, target_size)
             face_img = functions.normalize_input(face_img, normalization="base")
@@ -151,7 +165,7 @@ def assign_and_localize_faces(frames: list[Arr]) -> tuple[FaceDB, list[OnFrameFa
             embedding = model.predict(face_img)[0]
             face_id = add(database, embedding)
 
-            on_frame.append((face_id, face_loc))
+            on_frame.append(Face(face_id, face_loc))
 
         faces.append(on_frame)
 
@@ -168,7 +182,7 @@ def postprocess_faces(
 
     database = {key: face for key, face in database.items() if face.frequency > 24}
     faces = [
-        [(key, loc) for key, loc in frame_faces if key in database] for frame_faces in faces
+        [face for face in frame_faces if face.id_ in database] for frame_faces in faces
     ]
 
     return database, faces
