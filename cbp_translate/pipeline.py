@@ -1,131 +1,83 @@
-import re
-from collections import deque
-from pathlib import Path
+import tempfile
+from dataclasses import dataclass
+from os import path
 
-import deepl
-import numpy as np
-import whisper
-from unidecode import unidecode
-
-from . import Arr
-from .cv import add_text_to_frame
-from .io import combine_streams, extract_audio, load_frames, save_frames
-
-
-def deepl_key():
-    return Path("~/.deepL/token.txt").expanduser().read_text().strip()
-
-
-def translate(text: str, preserve_formatting: bool = False) -> str:
-    translator = deepl.Translator(deepl_key())
-    result = translator.translate_text(
-        text, target_lang="EN-GB", preserve_formatting=preserve_formatting
-    )
-
-    assert not isinstance(result, list)
-    return result.text
+from .alignment import (
+    assign_to_frames,
+    match_speakers_to_faces,
+    match_speakers_to_phrases,
+)
+from .asr import extract_segments
+from .faces import extract_faces
+from .loaders import combine_streams, extract_audio, load_frames, save_frames
+from .speakers import extract_speakers
+from .subtitles import add_speaker_marker, add_subtitles
+from .translation import translate_segments
 
 
-def remove_whitespace(text: str) -> str:
-    """Remove double and trailing whitespace"""
-    return " ".join(text.strip().split())
+@dataclass
+class Config:
+    target_lang: str = "EN-GB"
+    subtitles_location: str = "bottom"
+    speaker_markers: bool = True
 
 
-def split_sentences(text: str) -> list[str]:
-    """Split the text into sentences using regex"""
-    sentences = re.split(r"(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s", text)
-    sentences = [remove_whitespace(s) for s in sentences]
+def main(path_in: str, path_out: str, config: Config):
 
-    return sentences
+    with tempfile.TemporaryDirectory() as tmp:
 
+        path_audio = path.join(tmp, "audio.mp3")
+        path_video = path.join(tmp, "frames.mp4")
 
-def translate_segments(segments: list[dict]) -> list[dict]:
-    text = "\n".join([s["text"] for s in segments])
-    text_en = translate(text, preserve_formatting=True)
-    for s, t in zip(segments, text_en.splitlines()):
-        s["text_en"] = t
+        frames, fps = load_frames(path_in)
+        path_audio = extract_audio(path_in, path_audio)
 
-    return segments
+        segments = extract_segments(path_audio)
+        t_segments = translate_segments(segments)
 
+        speakers = extract_speakers(path_audio)
+        _, faces = extract_faces(frames)
 
-def assign_timestamps(segments: list[dict], key: str) -> deque[tuple[str, int]]:
-    chars = []
+        segment_to_speaker = match_speakers_to_phrases(t_segments, speakers)
+        face_to_speaker = match_speakers_to_faces(faces, speakers, fps)
 
-    for s in segments:
-        text = s[key]
-        start = s["start"]
-        end = max(start + 0.05, s["end"] - 1.0)
+        aligned = assign_to_frames(
+            segments=t_segments,
+            faces=faces,
+            segment_to_speaker=segment_to_speaker,
+            face_to_speaker=face_to_speaker,
+            fps=fps,
+        )
 
-        for i, c in enumerate(text):
-            chars.append((c, start + i * (end - start) / len(text)))
+        processed = []
+        for frame, entries in zip(frames, aligned):
+            frame = frame.copy()
+            entries = entries[:2]
 
-    return deque(chars)
+            for i, entry in enumerate(entries):
 
+                frame = add_subtitles(
+                    frame,
+                    display_text=entry.text_src_displayed,
+                    full_text=entry.text_src_full,
+                    location="top",
+                    row=i,
+                    speaker=entry.speaker,
+                )
 
-class Buffer:
-    def __init__(self):
-        self.chars = []
-        self.stops = {".", "!", "?", ";"}
-        self.clear = False
+                frame = add_subtitles(
+                    frame,
+                    display_text=entry.text_tgt_displayed,
+                    full_text=entry.text_tgt_full,
+                    location="bottom",
+                    row=i,
+                    speaker=entry.speaker,
+                )
 
-    def check(self, t: float, q: deque):
-        if t > q[0][1]:
-            self.add(q.popleft()[0])
-        return q
+                if entry.face_loc is not None:
+                    frame = add_speaker_marker(frame, entry.face_loc, entry.speaker)
 
-    def add(self, c):
+                processed.append(frame)
 
-        if self.clear:
-            self.chars = []
-            self.clear = False
-
-        self.chars.append(c)
-
-        if c in self.stops:
-            self.clear = True
-
-    @property
-    def text(self):
-        return "".join(self.chars)
-
-
-def annotate_frames(
-    frames: list[Arr],
-    fps: int,
-    segments: list[dict],
-    key: str,
-    location: int,
-) -> list[Arr]:
-
-    result = []
-    chars = assign_timestamps(segments, key)
-    buffer = Buffer()
-
-    for i, frame in enumerate(frames):
-        t = i / fps
-        chars = buffer.check(t, chars)
-        frame = add_text_to_frame(frame, text=buffer.text, position=(10, location))
-        result.append(frame)
-
-    return result
-
-
-def end_to_end():
-    path_src = "../data/samples/keanu_dlc.webm"
-    path_audio = "./maklowicz.mp3"
-    path_video = "./maklowicz-frames.mp4"
-    path_out = "./maklowicz.mp4"
-
-    frames, fps = load_frames(path_src)
-    path_audio = extract_audio(path_src, path_audio)
-    model = whisper.load_model("large", "cuda")
-    result = whisper.transcribe(model, path_audio)
-    segments = result["segments"]
-    segments = translate_segments(segments)
-    new_frames = [frame.copy() for frame in frames]
-    new_frames = annotate_frames(new_frames, fps, segments, "text", 100)
-    new_frames = annotate_frames(new_frames, fps, segments, "text_en", 150)
-    path_video = save_frames(new_frames, fps, path_video)
-    path_out = combine_streams(
-        path_video=path_video, path_audio=path_audio, path_out=path_out
-    )
+        save_frames(processed, fps, path_video)
+        combine_streams(path_video, path_audio, path_out)
