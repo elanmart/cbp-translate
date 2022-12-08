@@ -9,7 +9,6 @@ class SpeechSegment:
     start: float
     end: float
     text_src: str
-    text_tgt: str = ""
 
 
 def extract_segments(path: str) -> list[SpeechSegment]:
