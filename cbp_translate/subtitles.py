@@ -1,10 +1,9 @@
 import cv2
 import numpy as np
 from unidecode import unidecode
-import PIL
 from PIL import Image, ImageDraw, ImageFont
 
-from . import BGR, Arr
+Arr = np.ndarray
 
 FONTS = {
     "dejavu": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -30,15 +29,16 @@ def add_subtitles(
 ):
 
     # Get basic dimensions and add the black borders for subtitles
-    frame_h, frame_w, _ = frame.shape
-    frame, border_h = add_borders(frame, size=border_size)
-    text_h = int(0.425 * border_h)
+    _, frame_w, _ = frame.shape
+    frame, frame_h, border_h = add_borders(frame, size=border_size)
+    text_h = int(0.33 * border_h)
     offset = int(0.05 * border_h)
 
     # Prep the font and get the size of the full text in pixels
     font_path = FONTS[font_family]
     font = ImageFont.truetype(font_path, text_h)
     text_w = font.getlength(full_text)
+    text_w = min(text_w, frame_w)
 
     # Get the y position, depending on the language (src / target)
     if location == "top":
@@ -49,7 +49,11 @@ def add_subtitles(
         raise ValueError(location)
 
     color = COLORS_RGB[speaker]
-    pos = (int((frame_w - text_w) / 2), y)
+    x = max(
+        10,
+        int(frame_w // 2 - text_w // 2),
+    )
+    pos = (x, y)
 
     img = Image.fromarray(frame)
     draw = ImageDraw.Draw(img)
@@ -66,10 +70,12 @@ def add_borders(frame: Arr, size: float = 0.1):
         subtitles_height = int(round(size * height))
         border = np.zeros((subtitles_height, width, 3), np.uint8)
         frame = np.concatenate((border, frame, border), axis=0)
+        frame_h = frame.shape[0]
     else:
         subtitles_height = np.nonzero(frame[:, 0, 0])[0].min()
+        frame_h = frame.shape[0] - subtitles_height * 2
 
-    return frame, subtitles_height
+    return frame, frame_h, subtitles_height
 
 
 def add_speaker_marker(
