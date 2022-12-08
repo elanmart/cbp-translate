@@ -1,10 +1,18 @@
 import re
 from pathlib import Path
+from dataclasses import dataclass
 
 import deepl
 
-from . import Arr
 from .asr import SpeechSegment
+
+
+@dataclass
+class TranslatedSegment:
+    start: float
+    end: float
+    text_src: str
+    text_tgt: str
 
 
 def deepl_key():
@@ -38,10 +46,12 @@ def split_sentences(text: str) -> list[str]:
 
 def translate_segments(
     segments: list[SpeechSegment], target_lang: str = "EN-GB"
-) -> list[SpeechSegment]:
-    text = "\n".join([s.text_src for s in segments])
-    text_en = translate(text, preserve_formatting=True, target_lang=target_lang)
-    for s, t in zip(segments, text_en.splitlines()):
-        s.text_tgt = t
+) -> list[TranslatedSegment]:
+    text_src = "\n".join([s.text_src for s in segments])
+    text_tgt = translate(text_src, preserve_formatting=True, target_lang=target_lang)
 
-    return segments
+    translated = []
+    for s, txt in zip(segments, text_tgt.splitlines()):
+        translated.append(TranslatedSegment(s.start, s.end, s.text_src, txt))
+
+    return translated
