@@ -1,5 +1,6 @@
+from itertools import chain
 from pathlib import Path
-from typing import Iterable, Iterator, Optional
+from typing import Iterator, Optional
 
 import cv2
 import ffmpeg
@@ -31,7 +32,7 @@ def _iterate_capture(capture: cv2.VideoCapture) -> Iterator[Arr]:
         ret, frame = capture.read()
         if not ret:
             return
-        yield frame
+        yield frame[..., ::-1]
 
 
 def frame_iterator(path: str) -> Iterator[Arr]:
@@ -57,10 +58,11 @@ def extract_audio(path: str, path_out: Optional[str] = None):
     return path_out
 
 
-def save_frames(frames: Iterable[Arr], fps: int, shape: tuple[int, int], path_out: str):
+def save_frames(frames: Iterator[Arr], fps: int, path_out: str):
     """Save frames to a video file using ffmpeg"""
 
-    height, width = shape
+    first = next(frames)
+    height, width = first.shape[:2]
     video = ffmpeg.input(
         "pipe:",
         format="rawvideo",
@@ -72,8 +74,8 @@ def save_frames(frames: Iterable[Arr], fps: int, shape: tuple[int, int], path_ou
     output = ffmpeg.output(video, path_out, pix_fmt="yuv420p", vcodec="h264")
     output = ffmpeg.overwrite_output(output)
     process = ffmpeg.run_async(output, pipe_stdin=True, quiet=True)
-    for frame in frames:
-        frame = frame[:, :, ::-1].copy(order="C")
+    for frame in chain((first, ), frames):
+        frame = frame.copy(order="C")
         process.stdin.write(frame.tobytes())  # type: ignore
     process.stdin.close()  # type: ignore
     process.wait()
