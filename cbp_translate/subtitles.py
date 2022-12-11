@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from unidecode import unidecode
 from PIL import Image, ImageDraw, ImageFont
 
 Arr = np.ndarray
@@ -17,6 +16,7 @@ COLORS_RGB = [
     (52, 235, 214),  # Cyan
 ]
 
+
 def add_subtitles(
     frame: Arr,
     display_text: str,
@@ -24,13 +24,12 @@ def add_subtitles(
     speaker: int,
     location: str,
     row: int,
-    border_size: float = 0.1,
+    border_h: int,
+    picture_h: int,
     font_family: str = "dejavu",
 ):
 
-    # Get basic dimensions and add the black borders for subtitles
-    _, frame_w, _ = frame.shape
-    frame, frame_h, border_h = add_borders(frame, size=border_size)
+    frame_w = frame.shape[1]
     text_h = int(0.33 * border_h)
     offset = int(0.05 * border_h)
 
@@ -44,7 +43,7 @@ def add_subtitles(
     if location == "top":
         y = offset + text_h * row + offset * row
     elif location == "bottom":
-        y = border_h + frame_h + offset + text_h * row + offset * row
+        y = border_h + picture_h + offset + text_h * row + offset * row
     else:
         raise ValueError(location)
 
@@ -61,21 +60,13 @@ def add_subtitles(
     return np.array(img)
 
 
-def add_borders(frame: Arr, size: float = 0.1):
+def add_borders(frame: Arr, size: float = 0.1) -> tuple[Arr, int]:
+    height, width, _ = frame.shape
+    border_h = int(round(size * height))
+    border = np.zeros((border_h, width, 3), np.uint8)
+    frame = np.concatenate((border, frame, border), axis=0)
 
-    # TODO: design a less hacky solution
-    # Here we simply try to detect if the padding is already there
-    if (frame[0, ...] != 0).any():
-        height, width, _ = frame.shape
-        subtitles_height = int(round(size * height))
-        border = np.zeros((subtitles_height, width, 3), np.uint8)
-        frame = np.concatenate((border, frame, border), axis=0)
-        frame_h = frame.shape[0]
-    else:
-        subtitles_height = np.nonzero(frame[:, 0, 0])[0].min()
-        frame_h = frame.shape[0] - subtitles_height * 2
-
-    return frame, frame_h, subtitles_height
+    return frame, border_h
 
 
 def add_speaker_marker(
@@ -93,9 +84,11 @@ def add_speaker_marker(
     x_center = int((x0 + x1) / 2)
     y_center = int(y0 - face_h * 0.25)
     radius = (x1 - x0) // 4
-    
+
     shapes = np.zeros_like(img, np.uint8)
-    cv2.circle(shapes, (x_center, y_center), radius, color, thickness=-1, lineType=cv2.FILLED)
+    cv2.circle(
+        shapes, (x_center, y_center), radius, color, thickness=-1, lineType=cv2.FILLED
+    )
 
     out = img.copy()
     mask = shapes.astype(bool)
