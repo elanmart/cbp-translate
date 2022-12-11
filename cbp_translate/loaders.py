@@ -1,46 +1,47 @@
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Iterator, Optional
 
 import cv2
 import ffmpeg
 import numpy as np
 
-from . import Arr
+Arr = np.ndarray
+
 
 def with_suffix(path: str, suffix: str) -> str:
-    """
-    Examples
-    --------
-    >>> with_suffix("foo.mp4", ".mp3")
-    'foo.mp3'
-    """
-
     return str(Path(path).with_suffix(suffix))
 
 
-def load_frames(path: str) -> tuple[list[Arr], int]:
-
-    # Open the stream
+def get_video_metadata(path: str) -> tuple[int, int, tuple[int, int]]:
     cap = cv2.VideoCapture(path)
-    if not cap.isOpened():
-        raise RuntimeError("Cannot open video")
 
-    # Get the frame rate
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        _, frame = cap.read()
 
-    # Load all frames
-    frames = []
+    finally:
+        cap.release()
+
+    return fps, length, frame.shape[:2]
+
+
+def _iterate_capture(capture: cv2.VideoCapture) -> Iterator[Arr]:
     while True:
-        ret, frame = cap.read()
+        ret, frame = capture.read()
         if not ret:
-            break
-        frames.append(frame[..., ::-1])
+            return
+        yield frame
 
-    # Close the stream
-    cap.release()
 
-    # Done
-    return frames, fps
+def frame_iterator(path: str) -> Iterator[Arr]:
+
+    cap = cv2.VideoCapture(path)
+
+    try:
+        yield from _iterate_capture(cap)
+    finally:
+        cap.release()
 
 
 def extract_audio(path: str, path_out: Optional[str] = None):
@@ -56,10 +57,10 @@ def extract_audio(path: str, path_out: Optional[str] = None):
     return path_out
 
 
-def save_frames(frames: list[Arr], fps: int, path_out: str):
+def save_frames(frames: Iterable[Arr], fps: int, shape: tuple[int, int], path_out: str):
     """Save frames to a video file using ffmpeg"""
 
-    height, width, _ = frames[0].shape
+    height, width = shape
     video = ffmpeg.input(
         "pipe:",
         format="rawvideo",
