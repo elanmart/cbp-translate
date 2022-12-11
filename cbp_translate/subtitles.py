@@ -71,23 +71,20 @@ def add_borders(frame: Arr, size: float = 0.1) -> tuple[Arr, int]:
 
 def add_speaker_marker(
     img: Arr,
+    border_h: int,
     face_loc: tuple[int, int, int, int],
     speaker: int,
-    alpha: float = 0.5,
+    alpha: float = 0.0,
 ):
 
     color = COLORS_RGB[speaker]
 
     x0, y0, x1, y1 = face_loc
-    face_h = y1 - y0
-
-    x_center = int((x0 + x1) / 2)
-    y_center = int(y0 - face_h * 0.25)
-    radius = (x1 - x0) // 4
+    y0, y1 = y0 + border_h, y1 + border_h
 
     shapes = np.zeros_like(img, np.uint8)
-    cv2.circle(
-        shapes, (x_center, y_center), radius, color, thickness=-1, lineType=cv2.FILLED
+    cv2.rectangle(
+        shapes, (x0, y0), (x1, y1), color, thickness=3, lineType=cv2.FILLED
     )
 
     out = img.copy()
