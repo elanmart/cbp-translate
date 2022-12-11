@@ -17,7 +17,7 @@ def hf_login():
     login(token=token)
 
 
-def extract_speakers(path_audio: str, ) -> list[SpeakerSegment]:
+def extract_speakers(path_audio: str) -> list[SpeakerSegment]:
     hf_login()
 
     pipeline = Pipeline.from_pretrained(
