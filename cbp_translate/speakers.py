@@ -3,7 +3,6 @@ from pathlib import Path
 
 from huggingface_hub import login  # type: ignore
 from pyannote.audio import Pipeline
-from pyannote.core import Annotation
 
 
 @dataclass
@@ -18,11 +17,11 @@ def hf_login():
     login(token=token)
 
 
-def extract_speakers(path_audio: str) -> list[SpeakerSegment]:
+def extract_speakers(path_audio: str, ) -> list[SpeakerSegment]:
     hf_login()
 
     pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization@develop", use_auth_token=True  # type: ignore
+        "pyannote/speaker-diarization@2.1.1", use_auth_token=True  # type: ignore
     )
     dia = pipeline(path_audio)
 
