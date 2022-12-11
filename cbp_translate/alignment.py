@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import Optional, Iterable
 from dataclasses import dataclass
 from collections import defaultdict
 
@@ -19,21 +19,19 @@ class FrameMetadata:
 
 
 def match_speakers_to_faces(
-    faces: list[OnFrameFaces], speakers: list[SpeakerSegment], fps: int
+    faces: Iterable[OnFrameFaces], speakers: list[SpeakerSegment], fps: int, n_frames: int
 ) -> dict[int, str]:
 
-    # Voices in each frame
-    voices: list[list[str]] = [[] for _ in range(len(faces))]
-
     def idx(t: float) -> int:
-        """Turn the timestamp into video frame index"""
         return math.ceil(t * fps)
+
+    voices = [[] for _ in range(n_frames)]
 
     for segment in speakers:
         start = idx(segment.start)
         end = idx(segment.end)
-
-        for i in range(start + 1, end - 1):
+        end = min(end, n_frames - 1)
+        for i in range(start + 1, end):
             voices[i].append(segment.id_)
 
     # Count the overlap between faces and voices
@@ -81,6 +79,7 @@ def assign_to_frames(
         return math.ceil(t * fps)
 
     def n_chars(text: str, frame: int, start_frame: int, end_frame: int) -> int:
+        end_frame = max(start_frame + 1, end_frame - fps // 2)
         length = end_frame - start_frame
         progress = (frame - start_frame) / length
         return 1 + int(len(text) * progress)
