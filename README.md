@@ -2,9 +2,12 @@
 
 This project aims to implement a Cybperpunk-like translation system
 
-![Cyberpunk 2077 GIF](https://media.giphy.com/media/bUMahCWn8OpEusmJV8/giphy.gif) -->
-
+<p align="center">
+    <img src="https://media.giphy.com/media/bUMahCWn8OpEusmJV8/giphy.gif" alt="cyberpunk-example-gif" width="600"/>
+</p>
 
 # Architecture
 
-![Drawing](resources/Untitled-2022-12-11-2233.png)
+<p align="center">
+    <img src=".resources/flow-2022-12-11-2233.png" alt="data-flow-diagram" width="800"/>
+</p>
