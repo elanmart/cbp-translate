@@ -86,7 +86,7 @@ def save_frames(frames: Iterator[Arr], fps: int, path_out: str):
     output = ffmpeg.output(video, path_out, pix_fmt="yuv420p", vcodec="h264")
     output = ffmpeg.overwrite_output(output)
     process = ffmpeg.run_async(output, pipe_stdin=True, quiet=True)
-    for frame in chain((first,), frames):
+    for frame in frames:
         frame = frame.copy(order="C")
         process.stdin.write(frame.tobytes())  # type: ignore
     process.stdin.close()  # type: ignore
