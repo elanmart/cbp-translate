@@ -260,9 +260,13 @@ def assign_face_ids(
 
     # Sort the faces by size
     frame_faces = sorted(frame_faces, key=lambda f: f.area, reverse=True)
-    embeddings = np.stack([face.embedding for face in frame_faces])
+
+    # Skip if nothing to do
+    if len(frame_faces) == 0:
+        return []
 
     # Calculate the cosine distance to each cluster center
+    embeddings = np.stack([face.embedding for face in frame_faces])
     distances = pairwise_distances(
         embeddings, cluster_centers, metric="cosine", n_jobs=-1
     )
