@@ -83,9 +83,7 @@ def add_speaker_marker(
     y0, y1 = y0 + border_h, y1 + border_h
 
     shapes = np.zeros_like(img, np.uint8)
-    cv2.rectangle(
-        shapes, (x0, y0), (x1, y1), color, thickness=3, lineType=cv2.FILLED
-    )
+    cv2.rectangle(shapes, (x0, y0), (x1, y1), color, thickness=3, lineType=cv2.FILLED)
 
     out = img.copy()
     mask = shapes.astype(bool)

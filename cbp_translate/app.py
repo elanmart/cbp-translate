@@ -1,5 +1,5 @@
-import sys
 import shutil
+import sys
 import tempfile
 from logging import basicConfig, getLogger
 from pathlib import Path
@@ -10,13 +10,13 @@ import modal
 from fastapi import FastAPI
 from gradio.routes import mount_gradio_app
 
-from cbp_translate.download import download
+from cbp_translate.components.download import download
+from cbp_translate.components.translation import LANGUAGES
 from cbp_translate.modal_ import ROOT, cpu_image, stub, volume
 from cbp_translate.pipeline import Config, run
-from cbp_translate.translation import LANGUAGES
+
 
 basicConfig(level="INFO", format="%(asctime)s :: %(levelname)s :: %(message)s")
-
 resources = Path(__file__).parent / ".resources"
 logger = getLogger(__name__)
 web_app = FastAPI()
@@ -91,8 +91,9 @@ def main(url: str, video: str, language: str):
 )
 def _main_():
     out = main("", "/resources/keanu-colbert-30s.mp4", "Polish")
-    
+
     import sys
+
     print(">>> DONE", file=sys.stderr)
 
     with open(out, "rb") as f:
@@ -134,4 +135,3 @@ if __name__ == "__main__":
 #         blocks=interface,
 #         path="/",
 #     )
-

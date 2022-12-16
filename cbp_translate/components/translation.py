@@ -5,7 +5,7 @@ from pathlib import Path
 
 import deepl
 
-from .asr import SpeechSegment
+from cbp_translate.components.asr import SpeechSegment
 
 LANGUAGES = {
     "Bulgarian": "BG",

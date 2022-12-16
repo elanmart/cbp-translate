@@ -3,9 +3,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Optional, cast
 
-from .faces import FaceLocation, OnFrameRecognized
-from .speakers import SpeakerSegment
-from .translation import TranslatedSegment
+from cbp_translate.components.faces import FaceLocation, OnFrameRecognized
+from cbp_translate.components.speakers import SpeakerSegment
+from cbp_translate.components.translation import TranslatedSegment
 
 
 @dataclass

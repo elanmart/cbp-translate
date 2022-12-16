@@ -2,30 +2,33 @@ import os
 import tempfile
 from dataclasses import dataclass
 from logging import getLogger
-from os import path
 from pathlib import Path
 
 import numpy as np
 
-from .alignment import (
+from cbp_translate.components.alignment import (
     FrameMetadata,
     assign_to_frames,
     match_speakers_to_faces,
     match_speakers_to_phrases,
 )
-from .asr import extract_segments
-from .faces import extract_faces
-from .loaders import (
+from cbp_translate.components.asr import extract_segments
+from cbp_translate.components.faces import extract_faces
+from cbp_translate.components.loaders import (
     combine_streams,
     extract_audio,
     frame_iterator,
     get_video_metadata,
     save_frames,
 )
-from .modal_ import ROOT, cpu_image, deepl_secret, stub, volume
-from .speakers import extract_speakers
-from .subtitles import add_borders, add_speaker_marker, add_subtitles
-from .translation import translate_segments
+from cbp_translate.components.speakers import extract_speakers
+from cbp_translate.components.subtitles import (
+    add_borders,
+    add_speaker_marker,
+    add_subtitles,
+)
+from cbp_translate.components.translation import translate_segments
+from cbp_translate.modal_ import ROOT, cpu_image, deepl_secret, stub, volume
 
 logger = getLogger(__name__)
 Arr = np.ndarray
@@ -92,8 +95,8 @@ def run(path_in: str, path_out: str, config: Config) -> Path:
         logger.info(f"Processing {path_in} to {path_out} in {storage}")
         deepl_key = os.environ["DEEPL_KEY"]
 
-        path_audio = path.join(storage, "audio.wav")
-        path_video = path.join(storage, "video.mp4")
+        path_audio = os.path.join(storage, "audio.wav")
+        path_video = os.path.join(storage, "video.mp4")
         fps, length, _ = get_video_metadata(path_in)
 
         path_audio = extract_audio(path_in, path_audio)

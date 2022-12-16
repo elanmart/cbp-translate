@@ -6,10 +6,10 @@ import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import pairwise_distances
 
-from . import Arr
-from .loaders import frame_iterator
-from .modal_ import ROOT, cpu_image, gpu_image, stub, volume
+from cbp_translate.components.loaders import frame_iterator
+from cbp_translate.modal_ import ROOT, cpu_image, gpu_image, stub, volume
 
+Arr = np.ndarray
 FaceId = int
 Image = np.ndarray
 Embedding = np.ndarray
@@ -174,6 +174,7 @@ class GetFaceEmbedding:
     def __enter__(self):
 
         import tensorflow as tf
+
         assert len(tf.config.list_physical_devices("GPU")) == 0
 
         from deepface import DeepFace
@@ -238,7 +239,9 @@ def face_clustering(detected: list[OnFrameDetected]) -> Arr:
 
 
 @stub.function(image=cpu_image)
-def assign_face_ids(frame_faces: OnFrameDetected, cluster_centers: Arr) -> OnFrameRecognized:
+def assign_face_ids(
+    frame_faces: OnFrameDetected, cluster_centers: Arr
+) -> OnFrameRecognized:
     """Assigns a unique ID to each face in the video."""
 
     frame_faces = sorted(frame_faces, key=lambda f: f.area, reverse=True)
@@ -274,7 +277,9 @@ def extract_faces(path_in: str) -> list[OnFrameRecognized]:
     frames = frame_iterator(path_in)
     detected = list(obj.f.map(frames))
     cluster_centers = face_clustering(detected)
-    recognized = assign_face_ids.map(detected, kwargs={"cluster_centers": cluster_centers})
+    recognized = assign_face_ids.map(
+        detected, kwargs={"cluster_centers": cluster_centers}
+    )
     recognized = list(recognized)
 
     return recognized

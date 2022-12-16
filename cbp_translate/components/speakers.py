@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-from .modal_ import ROOT, gpu_image, hf_secret, stub, volume
+from cbp_translate.modal_ import ROOT, gpu_image, hf_secret, stub, volume
 
 
 @dataclass
@@ -15,7 +15,7 @@ class SpeakerSegment:
     image=gpu_image,
     gpu=True,
     shared_volumes={str(ROOT): volume},
-    secret=hf_secret, 
+    secret=hf_secret,
     timeout=30 * 60,
 )
 def extract_speakers(path_audio: str) -> list[SpeakerSegment]:
