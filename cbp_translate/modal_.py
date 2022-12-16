@@ -1,3 +1,5 @@
+""" Defines the Modal infrastructure """
+
 from pathlib import Path
 
 import modal
