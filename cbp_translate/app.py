@@ -91,16 +91,28 @@ def main(url: str, video: str, language: str):
     secret=modal.Secret({"DEEPFACE_HOME": str(ROOT)}),
     timeout=10_000,
 )
-def _app_():
-    out = main("", "/resources/keanu-colbert-30s.mp4", "Polish")
+def _app_(item):
+    filename, language = item
+    out = main("", f"/resources/{filename}", language)
     with open(out, "rb") as f:
-        return f.read()
+        return filename, f.read()
 
 
 if __name__ == "__main__":
+
+    args = [
+        ("dukaj-onet-60s.mp4", "English (British)"),
+        ("dukaj-outdoor.mp4", "English (British)"),
+        ("dukaj-progress.mp4", "English (British)"),
+        ("rmf-tusk-rzecznik.mp4", "English (British)"),
+    ]
+
     with stub.run():
-        with open("samples/keanu-colbert-30s.translated.mp4", "wb") as f:
-            f.write(_app_.call())
+        outputs = _app_.map(args)
+        for name_in, content in outputs:
+            name_out = name_in.split(".")[0] + ".translated.mp4"
+            with open(f"outputs/{name_out}", "wb") as f:
+                f.write(content)
 
 
 # @stub.asgi(

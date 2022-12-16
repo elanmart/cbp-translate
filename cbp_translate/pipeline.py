@@ -58,7 +58,7 @@ class Config:
 
 
 @stub.function(image=cpu_image, concurrency_limit=100)
-def annotate_frames(item: tuple[Arr, FrameMetadata], config: Config) -> Arr:
+def annotate_frame(item: tuple[Arr, FrameMetadata], config: Config) -> Arr:
     """Annotate a single frame with subtitles and speaker markers."""
 
     # Get the frame and the metadata
@@ -169,7 +169,7 @@ def run(path_in: str, path_out: str, config: Config) -> Path:
         # Add the metadata to each frame. We parallelize this since it's quite slow otherwise.
         frames = frame_iterator(path_in)
         items = zip(frames, aligned)
-        processed = annotate_frames.map(items, kwargs={"config": config})
+        processed = annotate_frame.map(items, kwargs={"config": config})
 
         # Now save the frames to an mp4 and add the original audio
         save_frames(processed, fps, path_video)
