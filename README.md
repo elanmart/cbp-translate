@@ -34,9 +34,11 @@ Here's a 30s sample of Keanu Reeves (who plays a major character in CBP 2077) ta
 
 You can see that there is couple of issues here: both voice assignment and face assignment could use some improvement! Voice recognition and translation are top notch, though! 
 
-<p align="center">
+< VID GOES HERE >
+
+<!-- <p align="center">
     <img src="https://media.giphy.com/media/bUMahCWn8OpEusmJV8/giphy.gif" alt="cyberpunk-example-gif" width="600"/>
-</p>
+</p> -->
 
 # Implementation 
 
@@ -208,7 +210,7 @@ Last thing I wanted to check is how easy it is to deploy this system on a cloud 
 
 Getting the frontend ready can be trivially done with [Gradio](https://gradio.app/docs/). 
 
-< SCREEN SHOT >
+< GRADIO SCREEN SHOT >
 
 We could try to deploy the model with [Gradio Spaces](https://huggingface.co/docs/hub/spaces-sdks-gradio), but I wanted to try something a bit more "production-ready".
 
@@ -245,6 +247,8 @@ So with minimal boilerplate we now have a code that can run remotely **within se
 So after decorating a couple of functions we can finally press `run`, and of it goes:
 
 The app is currently not running, as both `Modal` and `DeepL` are paid services, and this is clearly not a project which I could monetize. 
+
+< MODAL SCREEN SHOT ? >
 
 # Development
 
