@@ -258,6 +258,6 @@ Once you've got these things set up (HF and DeepL tokens need to be added to Mod
 ```
 python -m venv ./venv
 source ./venv/bin/activate
-python -m pip install -r requirements-local.txt
+python -m pip install -r requirements.txt
 python cbp_translate/app.py
 ```
