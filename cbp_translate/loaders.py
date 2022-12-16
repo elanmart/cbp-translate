@@ -38,6 +38,8 @@ def _iterate_capture(capture: cv2.VideoCapture) -> Iterator[Arr]:
 def frame_iterator(path: str) -> Iterator[Arr]:
 
     cap = cv2.VideoCapture(path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open video: {path}")
 
     try:
         yield from _iterate_capture(cap)
@@ -61,6 +63,7 @@ def extract_audio(path: str, path_out: Optional[str] = None):
 def save_frames(frames: Iterator[Arr], fps: int, path_out: str):
     """Save frames to a video file using ffmpeg"""
 
+    frames = iter(frames)
     first = next(frames)
     height, width = first.shape[:2]
     video = ffmpeg.input(
