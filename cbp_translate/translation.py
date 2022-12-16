@@ -1,6 +1,7 @@
+import os
 import re
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
 import deepl
 
@@ -35,8 +36,9 @@ LANGUAGES = {
     "Swedish": "SV",
     "Turkish": "TR",
     "Ukrainian": "UK",
-    "Chinese (simplified)": "ZH", 
+    "Chinese (simplified)": "ZH",
 }
+
 
 @dataclass
 class TranslatedSegment:
@@ -51,9 +53,12 @@ def deepl_key():
 
 
 def translate(
-    text: str, preserve_formatting: bool = False, target_lang: str = "EN-GB"
+    text: str,
+    auth_key: str,
+    preserve_formatting: bool = False,
+    target_lang: str = "EN-GB",
 ) -> str:
-    translator = deepl.Translator(deepl_key())
+    translator = deepl.Translator(auth_key)
     result = translator.translate_text(
         text, target_lang=target_lang, preserve_formatting=preserve_formatting
     )
@@ -76,10 +81,18 @@ def split_sentences(text: str) -> list[str]:
 
 
 def translate_segments(
-    segments: list[SpeechSegment], target_lang: str = "EN-GB"
+    segments: list[SpeechSegment], target_lang: str = "EN-GB", auth_key: str = ""
 ) -> list[TranslatedSegment]:
+
+    auth_key = auth_key or os.environ["DEEPL_KEY"]
+
     text_src = "\n".join([s.text_src for s in segments])
-    text_tgt = translate(text_src, preserve_formatting=True, target_lang=target_lang)
+    text_tgt = translate(
+        text=text_src,
+        auth_key=auth_key,
+        preserve_formatting=True,
+        target_lang=target_lang,
+    )
 
     translated = []
     for s, txt in zip(segments, text_tgt.splitlines()):
