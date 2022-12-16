@@ -34,7 +34,7 @@ Here's a 30s sample of Keanu Reeves (who plays a major character in CBP 2077) ta
 
 You can see that there is couple of issues here: both voice assignment and face assignment could use some improvement! Voice recognition and translation are top notch, though! 
 
-< VID GOES HERE >
+https://user-images.githubusercontent.com/10772830/208008036-b7006949-6b17-4035-8450-dbff89f8d251.mp4
 
 <!-- <p align="center">
     <img src="https://media.giphy.com/media/bUMahCWn8OpEusmJV8/giphy.gif" alt="cyberpunk-example-gif" width="600"/>
