@@ -1,12 +1,14 @@
+""" Translation module """
+
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
 
 import deepl
 
 from cbp_translate.components.asr import SpeechSegment
 
+# All languages supported by DeepL
 LANGUAGES = {
     "Bulgarian": "BG",
     "Czech": "CS",
@@ -48,8 +50,17 @@ class TranslatedSegment:
     text_tgt: str
 
 
-def deepl_key():
-    return Path("~/.deepL/token.txt").expanduser().read_text().strip()
+def remove_whitespace(text: str) -> str:
+    """Remove double and trailing whitespace"""
+    return " ".join(text.strip().split())
+
+
+def split_sentences(text: str) -> list[str]:
+    """Split the text into sentences. This is a rather crude approximation but seems to work well enough with Wshiper's output."""
+    sentences = re.split(r"(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s", text)
+    sentences = [remove_whitespace(s) for s in sentences]
+
+    return sentences
 
 
 def translate(
@@ -58,6 +69,8 @@ def translate(
     preserve_formatting: bool = False,
     target_lang: str = "EN-GB",
 ) -> str:
+    """Translate text using DeepL"""
+
     translator = deepl.Translator(auth_key)
     result = translator.translate_text(
         text, target_lang=target_lang, preserve_formatting=preserve_formatting
@@ -67,26 +80,16 @@ def translate(
     return result.text
 
 
-def remove_whitespace(text: str) -> str:
-    """Remove double and trailing whitespace"""
-    return " ".join(text.strip().split())
-
-
-def split_sentences(text: str) -> list[str]:
-    """Split the text into sentences using regex"""
-    sentences = re.split(r"(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s", text)
-    sentences = [remove_whitespace(s) for s in sentences]
-
-    return sentences
-
-
 def translate_segments(
     segments: list[SpeechSegment], target_lang: str = "EN-GB", auth_key: str = ""
 ) -> list[TranslatedSegment]:
+    """Translate a list of detected phrases using DeepL"""
 
-    auth_key = auth_key or os.environ["DEEPL_KEY"]
-
+    # We feed the entire text to DeepL at once, even though it might come from multiple speakers
     text_src = "\n".join([s.text_src for s in segments])
+
+    # We need to preserve formatting to be able to matche the translated text to the original segments
+    auth_key = auth_key or os.environ["DEEPL_KEY"]
     text_tgt = translate(
         text=text_src,
         auth_key=auth_key,
@@ -94,8 +97,10 @@ def translate_segments(
         target_lang=target_lang,
     )
 
+    # Build human-readable representation
     translated = []
     for s, txt in zip(segments, text_tgt.splitlines()):
         translated.append(TranslatedSegment(s.start, s.end, s.text_src, txt))
 
+    # Done
     return translated

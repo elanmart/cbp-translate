@@ -1,3 +1,5 @@
+""" ASR - automatic speech recognition. """
+
 from dataclasses import dataclass
 from typing import cast
 
@@ -19,17 +21,22 @@ class SpeechSegment:
     timeout=30 * 60,
 )
 def extract_segments(path: str) -> list[SpeechSegment]:
+    """Runs Whisper over the provided audio file."""
 
+    # Local imports are required for Modal
     import whisper
 
+    # Note that we're downloading the model to a shared volume
     model = whisper.load_model(
         "large", device="cuda", download_root=str(ROOT / "whisper")
     )
     result = whisper.transcribe(model, path)
 
+    # Extract the key information into human-readable objects
     segments = []
     for s in result["segments"]:
         s = cast(dict, s)
         segments.append(SpeechSegment(s["start"], s["end"], s["text"]))
 
+    # Done
     return segments

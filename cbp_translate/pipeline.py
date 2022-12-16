@@ -58,12 +58,12 @@ class Config:
 
 
 @stub.function(image=cpu_image, concurrency_limit=100)
-def annotate_frames(item: tuple[Arr, list[FrameMetadata]], config: Config) -> Arr:
+def annotate_frames(item: tuple[Arr, FrameMetadata], config: Config) -> Arr:
     """Annotate a single frame with subtitles and speaker markers."""
 
     # Get the frame and the metadata
-    frame, entries = item
-    entries = entries[:2]
+    frame, meta = item
+    entries = meta.all_speakers[:2]
     picture_h = frame.shape[0]
 
     # Add black stripes to the top and bottom of the frame
@@ -78,8 +78,8 @@ def annotate_frames(item: tuple[Arr, list[FrameMetadata]], config: Config) -> Ar
         # Top subtitles -- source language
         frame = add_subtitles(
             frame,
-            display_text=entry.text_src_displayed,
-            full_text=entry.text_src_full,
+            display_text=entry.source.displayed,
+            full_text=entry.source.full,
             location="top",
             **kwd,
         )
@@ -87,8 +87,8 @@ def annotate_frames(item: tuple[Arr, list[FrameMetadata]], config: Config) -> Ar
         # Bottom subtitles -- target language
         frame = add_subtitles(
             frame,
-            display_text=entry.text_tgt_displayed,
-            full_text=entry.text_tgt_full,
+            display_text=entry.target.displayed,
+            full_text=entry.target.full,
             location="bottom",
             **kwd,
         )

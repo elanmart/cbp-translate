@@ -1,3 +1,5 @@
+""" YT download helpers. """
+
 import re
 from logging import getLogger
 from pathlib import Path
@@ -10,6 +12,7 @@ logger = getLogger(__name__)
 
 
 def parse_yt_url(url: str) -> tuple[str, int]:
+    """Parse a YouTube URL to extract the starting timestamp if provided."""
 
     if urlparse(url).netloc not in {"youtu.be", "youtube.com", "www.youtube.com"}:
         raise ValueError("Not a YouTube URL")
@@ -26,6 +29,17 @@ def parse_yt_url(url: str) -> tuple[str, int]:
 
 
 def download(url: str, path_template: Path, time_limit: int = 60):
+    """Download a YouTube video.
+
+    Parameters
+    ----------
+    url: str
+        URL of the YouTube video
+    path_template: Path
+        Template for the output file. The extension will be added automatically.
+    time_limit: int
+        Controls how many seconds should be downloaded
+    """
 
     url, timestamp = parse_yt_url(url)
 

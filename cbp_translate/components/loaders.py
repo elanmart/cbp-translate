@@ -1,3 +1,5 @@
+""" Audio / Video IO utilities. """
+
 from itertools import chain
 from pathlib import Path
 from typing import Iterator, Optional
@@ -10,10 +12,14 @@ Arr = np.ndarray
 
 
 def with_suffix(path: str, suffix: str) -> str:
+    """Like Path.with_suffix but for strings :)"""
+
     return str(Path(path).with_suffix(suffix))
 
 
 def get_video_metadata(path: str) -> tuple[int, int, tuple[int, int]]:
+    """Read the FPS, number of frames, and resolution of a video."""
+
     cap = cv2.VideoCapture(path)
 
     try:
@@ -32,10 +38,13 @@ def _iterate_capture(capture: cv2.VideoCapture) -> Iterator[Arr]:
         ret, frame = capture.read()
         if not ret:
             return
+
+        # For some reason OpenCV reads frames in BGR format
         yield frame[..., ::-1]
 
 
 def frame_iterator(path: str) -> Iterator[Arr]:
+    """Iterator yielding video frames as np arrays"""
 
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():

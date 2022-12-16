@@ -1,4 +1,8 @@
-from typing import Iterator, NamedTuple
+""" Face detection, embedding, clustering, and recognition."""
+
+from dataclasses import dataclass, field
+from functools import partial
+from typing import NamedTuple
 
 import cv2
 import modal
@@ -22,10 +26,11 @@ class FaceLocation(NamedTuple):
     y1: int
 
 
-class DetectedFace(NamedTuple):
+@dataclass
+class DetectedFace:
     location: FaceLocation
-    image: Image = np.array([])
-    embedding: Embedding = np.array([])
+    image: Image = field(default_factory=partial(np.ndarray, [], dtype=np.uint8))
+    embedding: Embedding = field(default_factory=partial(np.ndarray, [], dtype=np.float64))
 
     @property
     def area(self):
@@ -40,7 +45,8 @@ class DetectedFace(NamedTuple):
         )
 
 
-class RecognizedFace(NamedTuple):
+@dataclass
+class RecognizedFace:
     person_id: FaceId
     location: FaceLocation
 
@@ -172,6 +178,7 @@ class GetFaceEmbedding:
     )
 
     def __enter__(self):
+        """ Load the models only once on container startup"""
 
         import tensorflow as tf
 
@@ -192,21 +199,26 @@ class GetFaceEmbedding:
 
     @stub.function(**kwd, concurrency_limit=100)
     def f(self, frame: Arr, top_k: int = 3, ratio: float = 3.0):
+        """Actual processing"""
 
         from deepface.commons import functions
 
+        # Detect, align, filter out small faces / side views
         detected = _detect_faces(frame[..., ::-1], align=True, model=self.retina)
         detected = _filter_faces(detected, top_k=top_k, ratio=ratio)
         embedded = []
 
         for face in detected:
 
+            # Get the embedding using another model
             face_img = _process_face(face.image, self.target_size)
             face_img = functions.normalize_input(face_img, normalization="base")
             embedding = np.array(self.model.predict(face_img)[0])
 
+            # This will be returned for clustering
             embedded.append(DetectedFace(face.location, embedding=embedding))
 
+        # Done
         return embedded
 
 
@@ -219,6 +231,7 @@ def face_clustering(detected: list[OnFrameDetected]) -> Arr:
     )
 
     # The 0.68 threshold is based on the DeepFace recommended default for the ArcFace model
+    # TODO: test the impact of linkage choice
     agc = AgglomerativeClustering(
         n_clusters=None, affinity="cosine", linkage="average", distance_threshold=0.68  # type: ignore
     )
@@ -230,6 +243,7 @@ def face_clustering(detected: list[OnFrameDetected]) -> Arr:
     inds = inds[counts > 50]
 
     # Compute the mean embedding for each cluster
+    # TODO: can you read it out fromt the agc tree?
     centers = np.empty((len(inds), embeddings.shape[1]))
     for i in range(agc.n_clusters_):
         index = inds[i]
@@ -244,19 +258,24 @@ def assign_face_ids(
 ) -> OnFrameRecognized:
     """Assigns a unique ID to each face in the video."""
 
+    # Sort the faces by size
     frame_faces = sorted(frame_faces, key=lambda f: f.area, reverse=True)
     embeddings = np.stack([face.embedding for face in frame_faces])
+
+    # Calculate the cosine distance to each cluster center
     distances = pairwise_distances(
         embeddings, cluster_centers, metric="cosine", n_jobs=-1
     )
     annotated = []
-
     for idx, face in enumerate(frame_faces):
-
+        
+        # Assign the ID of the closest cluster center
         cluster_idx = np.argmin(distances[idx, :])
-        distances[:, cluster_idx] = np.inf
         recog = RecognizedFace(int(cluster_idx), face.location)
         annotated.append(recog)
+        
+        # Remove the ID from the list of available IDs
+        distances[:, cluster_idx] = np.inf
 
     return annotated
 
@@ -269,17 +288,24 @@ def extract_faces(path_in: str) -> list[OnFrameRecognized]:
     Then cluster the embeddings, and assign a unique id to each face in the video stream.
     """
 
-    import sys
-
+    # Trigger model download
     obj = GetFaceEmbedding()
     _ = obj.download.call()
 
+    # Process the video
     frames = frame_iterator(path_in)
     detected = list(obj.f.map(frames))
+    
+    # Cluster the embeddings
     cluster_centers = face_clustering(detected)
+    
+    # Assign a unique ID to each face
     recognized = assign_face_ids.map(
         detected, kwargs={"cluster_centers": cluster_centers}
     )
+
+    # Trigger the computation
     recognized = list(recognized)
 
+    # Done
     return recognized

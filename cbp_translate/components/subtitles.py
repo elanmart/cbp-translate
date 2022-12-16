@@ -1,3 +1,5 @@
+""" OpenCV / PIL code for adding subtitles to a video frame """
+
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -28,6 +30,33 @@ def add_subtitles(
     picture_h: int,
     font_family: str = "dejavu",
 ):
+    """Add subtitles to a frame
+
+    Parameters
+    ----------
+    frame: np.ndarray
+        The current frame
+    display_text: str
+        The text that should be displayed on the current frame
+    full_text: str
+        The full text of the subtitle
+        We need this to properly size and center the display text
+    speaker: int
+        The speaker ID
+        We need this to color the text
+    location: str
+        Either "top" or "bottom"
+        This determines whether the subtitles are displayed at the top or bottom of the frame
+    row: int
+        The row number
+        Substitles can land either on the first or second row (first is the bottom one)
+    border_h: int
+        The height of the added border
+    picture_h: int
+        The height of the original frame
+    font_family: str
+        The font family to use
+    """
 
     frame_w = frame.shape[1]
     text_h = int(0.33 * border_h)
@@ -61,6 +90,8 @@ def add_subtitles(
 
 
 def add_borders(frame: Arr, size: float = 0.1) -> tuple[Arr, int]:
+    """Add black borders to the top and bottom of a frame. That's where the subtitles will be displayed."""
+    
     height, width, _ = frame.shape
     border_h = int(round(size * height))
     border = np.zeros((border_h, width, 3), np.uint8)
@@ -76,6 +107,7 @@ def add_speaker_marker(
     speaker: int,
     alpha: float = 0.0,
 ):
+    """Draw a colored rectangle around the speakers face"""
 
     color = COLORS_RGB[speaker]
 
