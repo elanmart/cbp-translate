@@ -38,8 +38,8 @@ Arr = np.ndarray
 
 @dataclass
 class Config:
-    """ Configuration for the pipeline.
-    
+    """Configuration for the pipeline.
+
     Parameters
     ----------
     target_lang: str
@@ -59,8 +59,7 @@ class Config:
 
 @stub.function(image=cpu_image, concurrency_limit=100)
 def annotate_frames(item: tuple[Arr, list[FrameMetadata]], config: Config) -> Arr:
-    """Annotate a single frame with subtitles and speaker markers.
-    """
+    """Annotate a single frame with subtitles and speaker markers."""
 
     # Get the frame and the metadata
     frame, entries = item
@@ -116,7 +115,7 @@ def annotate_frames(item: tuple[Arr, list[FrameMetadata]], config: Config) -> Ar
     timeout=10_000,
 )
 def run(path_in: str, path_out: str, config: Config) -> Path:
-    """ Runs the end-to-end live translation pipeline.
+    """Runs the end-to-end live translation pipeline.
 
     Parameters
     ----------
@@ -176,5 +175,5 @@ def run(path_in: str, path_out: str, config: Config) -> Path:
         save_frames(processed, fps, path_video)
         combine_streams(path_video, path_audio, path_out)
 
-    # We're done 
+    # We're done here
     return Path(path_out)
