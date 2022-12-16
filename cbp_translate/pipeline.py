@@ -1,8 +1,9 @@
+import os
 import tempfile
 from dataclasses import dataclass
 from logging import getLogger
 from os import path
-from typing import Iterator
+from pathlib import Path
 
 import numpy as np
 
@@ -21,6 +22,7 @@ from .loaders import (
     get_video_metadata,
     save_frames,
 )
+from .modal_ import ROOT, cpu_image, deepl_secret, stub, volume
 from .speakers import extract_speakers
 from .subtitles import add_borders, add_speaker_marker, add_subtitles
 from .translation import translate_segments
@@ -36,70 +38,78 @@ class Config:
     border_size: float = 0.1
 
 
-def annotate_frames(
-    frames: Iterator[Arr], aligned: list[list[FrameMetadata]], config: Config
-) -> Iterator[Arr]:
+@stub.function(image=cpu_image, concurrency_limit=100)
+def annotate_frames(item: tuple[Arr, list[FrameMetadata]], config: Config) -> Arr:
+    frame, entries = item
+    entries = entries[:2]
+    picture_h = frame.shape[0]
 
-    for frame, entries in zip(frames, aligned):
-        frame = frame.copy()
-        entries = entries[:2]
+    frame, border_h = add_borders(frame, config.border_size)
 
-        picture_h = frame.shape[0]
-        frame, border_h = add_borders(frame, config.border_size)
+    for i, entry in enumerate(entries):
 
-        for i, entry in enumerate(entries):
+        kwd = dict(row=i, speaker=entry.speaker, border_h=border_h, picture_h=picture_h)
 
-            kwd = dict(
-                row=i, speaker=entry.speaker, border_h=border_h, picture_h=picture_h
-            )
+        frame = add_subtitles(
+            frame,
+            display_text=entry.text_src_displayed,
+            full_text=entry.text_src_full,
+            location="top",
+            **kwd,
+        )
 
-            frame = add_subtitles(
+        frame = add_subtitles(
+            frame,
+            display_text=entry.text_tgt_displayed,
+            full_text=entry.text_tgt_full,
+            location="bottom",
+            **kwd,
+        )
+
+        if config.speaker_markers and (entry.face_loc is not None):
+            frame = add_speaker_marker(
                 frame,
-                display_text=entry.text_src_displayed,
-                full_text=entry.text_src_full,
-                location="top",
-                **kwd,
+                border_h=border_h,
+                face_loc=entry.face_loc,
+                speaker=entry.speaker,
             )
 
-            frame = add_subtitles(
-                frame,
-                display_text=entry.text_tgt_displayed,
-                full_text=entry.text_tgt_full,
-                location="bottom",
-                **kwd,
-            )
-
-            if config.speaker_markers and (entry.face_loc is not None):
-                frame = add_speaker_marker(
-                    frame,
-                    border_h=border_h,
-                    face_loc=entry.face_loc,
-                    speaker=entry.speaker,
-                )
-
-        yield frame
+    return frame
 
 
-def main(path_in: str, path_out: str, config: Config):
+@stub.function(
+    image=cpu_image,
+    secret=deepl_secret,
+    shared_volumes={str(ROOT): volume},
+    cpu=1.1,
+    memory=6000,
+    timeout=10_000,
+)
+def run(path_in: str, path_out: str, config: Config) -> Path:
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(dir=(ROOT / "tmp")) as storage:
 
-        logger.info(f"Processing {path_in} to {path_out} in {tmp}")
+        logger.info(f"Processing {path_in} to {path_out} in {storage}")
+        deepl_key = os.environ["DEEPL_KEY"]
 
-        path_audio = path.join(tmp, "audio.wav")
-        path_video = path.join(tmp, "video.mp4")
+        path_audio = path.join(storage, "audio.wav")
+        path_video = path.join(storage, "video.mp4")
+        fps, length, _ = get_video_metadata(path_in)
 
         path_audio = extract_audio(path_in, path_audio)
-        speakers = extract_speakers(path_audio)
-        segments = extract_segments(path_audio)
-        t_segments = translate_segments(segments, target_lang=config.target_lang)
+        speakers = extract_speakers.spawn(path_audio)
+        segments = extract_segments.spawn(path_audio)
+        faces = extract_faces.spawn(path_in)
 
-        fps, length, shape = get_video_metadata(path_in)
-        frames = frame_iterator(path_in)
-        faces = extract_faces(frames)
-        faces = list(faces)
+        segments = segments.get()
+        t_segments = translate_segments(
+            segments, target_lang=config.target_lang, auth_key=deepl_key
+        )
 
+        speakers = speakers.get()
         segment_to_speaker = match_speakers_to_phrases(t_segments, speakers)
+
+        faces = faces.get()
         face_to_speaker = match_speakers_to_faces(faces, speakers, fps, length)
 
         aligned = assign_to_frames(
@@ -111,9 +121,10 @@ def main(path_in: str, path_out: str, config: Config):
         )
 
         frames = frame_iterator(path_in)
-        processed = annotate_frames(frames, aligned, config)
+        items = zip(frames, aligned)
+        processed = annotate_frames.map(items, kwargs={"config": config})
 
         save_frames(processed, fps, path_video)
         combine_streams(path_video, path_audio, path_out)
 
-    return path_out
+    return Path(path_out)
