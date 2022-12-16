@@ -1,3 +1,5 @@
+""" Runs the app using Modal """
+
 import shutil
 import sys
 import tempfile
@@ -89,13 +91,8 @@ def main(url: str, video: str, language: str):
     secret=modal.Secret({"DEEPFACE_HOME": str(ROOT)}),
     timeout=10_000,
 )
-def _main_():
+def _app_():
     out = main("", "/resources/keanu-colbert-30s.mp4", "Polish")
-
-    import sys
-
-    print(">>> DONE", file=sys.stderr)
-
     with open(out, "rb") as f:
         return f.read()
 
@@ -103,7 +100,7 @@ def _main_():
 if __name__ == "__main__":
     with stub.run():
         with open("samples/keanu-colbert-30s.translated.mp4", "wb") as f:
-            f.write(_main_.call())
+            f.write(_app_.call())
 
 
 # @stub.asgi(
