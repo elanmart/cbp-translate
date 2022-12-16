@@ -1,16 +1,14 @@
-from typing import Iterable, Iterator, NamedTuple
+from typing import Iterator, NamedTuple
 
 import cv2
+import modal
 import numpy as np
-from deepface import DeepFace
-from deepface.commons import functions
-from retinaface import RetinaFace
-from retinaface.commons import postprocess
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import pairwise_distances
-from tensorflow.keras.preprocessing import image  # type: ignore
 
 from . import Arr
+from .loaders import frame_iterator
+from .modal_ import ROOT, cpu_image, gpu_image, stub, volume
 
 FaceId = int
 Image = np.ndarray
@@ -28,7 +26,6 @@ class DetectedFace(NamedTuple):
     location: FaceLocation
     image: Image = np.array([])
     embedding: Embedding = np.array([])
-    id_: FaceId = -1
 
     @property
     def area(self):
@@ -43,7 +40,13 @@ class DetectedFace(NamedTuple):
         )
 
 
-OnFrameFaces = list[DetectedFace]
+class RecognizedFace(NamedTuple):
+    person_id: FaceId
+    location: FaceLocation
+
+
+OnFrameDetected = list[DetectedFace]
+OnFrameRecognized = list[RecognizedFace]
 
 
 def _process_face(img: Arr, target_size: tuple[int, int]):
@@ -52,6 +55,8 @@ def _process_face(img: Arr, target_size: tuple[int, int]):
 
     Credits: https://github.com/serengil/deepface/
     """
+
+    from tensorflow.keras.preprocessing import image  # type: ignore
 
     if img.shape[0] > 0 and img.shape[1] > 0:
         factor_0 = target_size[0] / img.shape[0]
@@ -93,13 +98,16 @@ def _process_face(img: Arr, target_size: tuple[int, int]):
 
 def _detect_faces(
     img_path, threshold=0.95, model=None, align=True, allow_upscaling=True
-) -> OnFrameFaces:
+) -> OnFrameDetected:
     """Copied from retinaface.RetinaFace to return both the image and the facial area.
 
     Credits: https://github.com/serengil/retinaface
     """
 
-    faces: OnFrameFaces = []
+    from retinaface import RetinaFace
+    from retinaface.commons import postprocess
+
+    faces: OnFrameDetected = []
 
     img = RetinaFace.get_image(img_path)
     obj = RetinaFace.detect_faces(
@@ -139,8 +147,11 @@ def _detect_faces(
 
 
 def _filter_faces(
-    faces: OnFrameFaces, top_k: int = 3, ratio: float = 3.0
-) -> OnFrameFaces:
+    faces: OnFrameDetected, top_k: int = 3, ratio: float = 3.0
+) -> OnFrameDetected:
+    """Basic filtering: we keep only faces which are roughly facing the camera, and then
+    select top_k largest ones."""
+
     faces = [f for f in faces if f.height_ratio < ratio]
     faces = sorted(faces, key=lambda f: f.area, reverse=True)
     faces = faces[:top_k]
@@ -148,45 +159,76 @@ def _filter_faces(
     return faces
 
 
-def get_face_embeddings(
-    frames: Iterable[Arr],
-    top_k: int = 3,
-    ratio: float = 3.0,
-) -> Iterator[OnFrameFaces]:
+class GetFaceEmbedding:
+    """Detect & calculate embeddings for all the faces visible on a single frame"""
 
-    model = DeepFace.build_model("ArcFace")
-    retina = RetinaFace.build_model()
-    target_size = functions.find_input_shape(model)
+    kwd = dict(
+        image=gpu_image,
+        gpu=False,
+        memory=8000,
+        cpu=1,
+        shared_volumes={str(ROOT): volume},
+        secret=modal.Secret({"DEEPFACE_HOME": str(ROOT)}),
+    )
 
-    for frame in frames:
+    def __enter__(self):
 
-        embedded = []
-        detected = _detect_faces(frame[..., ::-1], align=True, model=retina)
+        import tensorflow as tf
+        assert len(tf.config.list_physical_devices("GPU")) == 0
+
+        from deepface import DeepFace
+        from deepface.commons import functions
+        from retinaface import RetinaFace
+
+        self.retina = RetinaFace.build_model()
+        self.model = DeepFace.build_model("ArcFace")
+        self.target_size = functions.find_input_shape(self.model)
+
+    @stub.function(**kwd, concurrency_limit=1)
+    def download(self):
+        """Dummy function triggering the download to the shared storage"""
+        pass
+
+    @stub.function(**kwd, concurrency_limit=100)
+    def f(self, frame: Arr, top_k: int = 3, ratio: float = 3.0):
+
+        from deepface.commons import functions
+
+        detected = _detect_faces(frame[..., ::-1], align=True, model=self.retina)
         detected = _filter_faces(detected, top_k=top_k, ratio=ratio)
+        embedded = []
 
         for face in detected:
 
-            face_img = _process_face(face.image, target_size)
+            face_img = _process_face(face.image, self.target_size)
             face_img = functions.normalize_input(face_img, normalization="base")
-            embedding = model.predict(face_img)[0]
+            embedding = np.array(self.model.predict(face_img)[0])
 
             embedded.append(DetectedFace(face.location, embedding=embedding))
 
-        yield embedded
+        return embedded
 
 
-def face_clustering(faces: Iterable[OnFrameFaces]) -> Arr:
+def face_clustering(detected: list[OnFrameDetected]) -> Arr:
+    """Cluster faces using AgglomerativeClustering."""
 
-    embeddings = [item.embedding for frame_faces in faces for item in frame_faces]
-    embeddings = np.stack(embeddings)
+    # Fetch the embeddings
+    embeddings = np.stack(
+        [item.embedding for frame_sublist in detected for item in frame_sublist]
+    )
 
+    # The 0.68 threshold is based on the DeepFace recommended default for the ArcFace model
     agc = AgglomerativeClustering(
         n_clusters=None, affinity="cosine", linkage="average", distance_threshold=0.68  # type: ignore
     )
     preds = agc.fit_predict(embeddings)
-    inds, counts = np.unique(preds, return_counts=True)
-    inds = inds[counts > 48]
 
+    # Filter out faces that are not present in at least 50 frames (2 sec for a 25 fps video)
+    # TODO: this could be improved by number of seconds, mean face size etc.
+    inds, counts = np.unique(preds, return_counts=True)
+    inds = inds[counts > 50]
+
+    # Compute the mean embedding for each cluster
     centers = np.empty((len(inds), embeddings.shape[1]))
     for i in range(agc.n_clusters_):
         index = inds[i]
@@ -195,31 +237,44 @@ def face_clustering(faces: Iterable[OnFrameFaces]) -> Arr:
     return centers
 
 
-def assign_face_ids(
-    faces: Iterable[OnFrameFaces], cluster_centers: Arr
-) -> Iterator[OnFrameFaces]:
+@stub.function(image=cpu_image)
+def assign_face_ids(frame_faces: OnFrameDetected, cluster_centers: Arr) -> OnFrameRecognized:
+    """Assigns a unique ID to each face in the video."""
 
-    for frame_faces in faces:
+    frame_faces = sorted(frame_faces, key=lambda f: f.area, reverse=True)
+    embeddings = np.stack([face.embedding for face in frame_faces])
+    distances = pairwise_distances(
+        embeddings, cluster_centers, metric="cosine", n_jobs=-1
+    )
+    annotated = []
 
-        frame_faces = sorted(frame_faces, key=lambda f: f.area, reverse=True)
-        embeddings = np.stack([face.embedding for face in frame_faces])
-        distances = pairwise_distances(embeddings, cluster_centers, metric="cosine")
-        annotated = []
+    for idx, face in enumerate(frame_faces):
 
-        for idx, face in enumerate(frame_faces):
+        cluster_idx = np.argmin(distances[idx, :])
+        distances[:, cluster_idx] = np.inf
+        recog = RecognizedFace(int(cluster_idx), face.location)
+        annotated.append(recog)
 
-            cluster_idx = np.argmin(distances[idx, :])
-            distances[:, cluster_idx] = np.inf
-            annotated.append(DetectedFace(face.location, id_=int(cluster_idx)))
-
-        yield annotated
+    return annotated
 
 
-def extract_faces(frames: Iterable[Arr]) -> Iterator[OnFrameFaces]:
+@stub.function(
+    image=cpu_image, memory=6000, shared_volumes={str(ROOT): volume}, timeout=30 * 60
+)
+def extract_faces(path_in: str) -> list[OnFrameRecognized]:
+    """For each frame, detect faces and extract their embeddings.
+    Then cluster the embeddings, and assign a unique id to each face in the video stream.
+    """
 
-    embeddings = get_face_embeddings(frames)
-    embeddings = list(embeddings)
-    cluster_centers = face_clustering(embeddings)
-    faces = assign_face_ids(embeddings, cluster_centers)
+    import sys
 
-    yield from faces
+    obj = GetFaceEmbedding()
+    _ = obj.download.call()
+
+    frames = frame_iterator(path_in)
+    detected = list(obj.f.map(frames))
+    cluster_centers = face_clustering(detected)
+    recognized = assign_face_ids.map(detected, kwargs={"cluster_centers": cluster_centers})
+    recognized = list(recognized)
+
+    return recognized

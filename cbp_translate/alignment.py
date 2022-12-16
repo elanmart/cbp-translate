@@ -1,9 +1,9 @@
 import math
-from typing import Optional, Iterable
-from dataclasses import dataclass
 from collections import defaultdict
+from dataclasses import dataclass
+from typing import Iterable, Optional, cast
 
-from .faces import OnFrameFaces, FaceLocation
+from .faces import FaceLocation, OnFrameRecognized
 from .speakers import SpeakerSegment
 from .translation import TranslatedSegment
 
@@ -19,9 +19,11 @@ class FrameMetadata:
 
 
 def match_speakers_to_faces(
-    faces: Iterable[OnFrameFaces], speakers: list[SpeakerSegment], fps: int, n_frames: int
+    faces: Iterable[OnFrameRecognized],
+    speakers: list[SpeakerSegment],
+    fps: int,
+    n_frames: int,
 ) -> dict[int, str]:
-
     def idx(t: float) -> int:
         return math.ceil(t * fps)
 
@@ -39,11 +41,13 @@ def match_speakers_to_faces(
     for frame_voices, frame_faces in zip(voices, faces):
         for face in frame_faces:
             for voice in frame_voices:
-                coocurrence[face.id_][voice] += 1
+                voice = cast(str, voice)
+                coocurrence[face.person_id][voice] += 1
 
     # Simple heuritic to find the best match
     matched = {}
     for face_id in coocurrence:
+        # TODO: annotate what's happening here
         matched[face_id] = max(coocurrence[face_id].items(), key=lambda x: x[1])[0]
 
     return matched
@@ -70,7 +74,7 @@ def match_speakers_to_phrases(
 
 def assign_to_frames(
     segments: list[TranslatedSegment],
-    faces: list[OnFrameFaces],
+    faces: list[OnFrameRecognized],
     segment_to_speaker: list[str],
     face_to_speaker: dict[int, str],
     fps: int,
@@ -99,22 +103,22 @@ def assign_to_frames(
 
         for frame_idx in range(start, min(display_end, len(faces))):
             matched_faces = [
-                f for f in faces[frame_idx] if face_to_speaker[f.id_] == speaker
+                f for f in faces[frame_idx] if face_to_speaker[f.person_id] == speaker
             ]
             face_loc = None if len(matched_faces) == 0 else matched_faces[0].location
 
             n_chars_src = n_chars(segment.text_src, frame_idx, start, end)
             n_chars_src = min(n_chars_src, len(segment.text_src))
             start_src = max(0, n_chars_src - 105)
-            
+
             n_chars_tgt = n_chars(segment.text_tgt, frame_idx, start, end)
             n_chars_tgt = min(n_chars_tgt, len(segment.text_tgt))
             start_tgt = max(0, n_chars_tgt - 105)
 
             meta = FrameMetadata(
-                text_src_displayed=segment.text_src[start_src : n_chars_src],
+                text_src_displayed=segment.text_src[start_src:n_chars_src],
                 text_src_full=segment.text_src,
-                text_tgt_displayed=segment.text_tgt[start_tgt : n_chars_tgt],
+                text_tgt_displayed=segment.text_tgt[start_tgt:n_chars_tgt],
                 text_tgt_full=segment.text_tgt,
                 speaker=speaker_id,
                 face_loc=face_loc,
