@@ -85,6 +85,13 @@ def translate_segments(
 ) -> list[TranslatedSegment]:
     """Translate a list of detected phrases using DeepL"""
 
+    # Debug
+    if not auth_key:
+        return [
+            TranslatedSegment(s.start, s.end, s.text_src, s.text_src)
+            for s in segments
+        ]
+
     # We feed the entire text to DeepL at once, even though it might come from multiple speakers
     text_src = "\n".join([s.text_src for s in segments])
 

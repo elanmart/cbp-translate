@@ -132,7 +132,7 @@ def run(path_in: str, path_out: str, config: Config) -> Path:
 
         # Setup
         logger.info(f"Processing {path_in} to {path_out} in {storage}")
-        deepl_key = os.environ["DEEPL_KEY"]
+        deepl_key = os.getenv("DEEPL_KEY", "")
         path_audio = os.path.join(storage, "audio.wav")
         path_video = os.path.join(storage, "video.mp4")
         fps, length, _ = get_video_metadata(path_in)
