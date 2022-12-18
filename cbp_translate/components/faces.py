@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from functools import partial
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import cv2
 import modal
@@ -11,11 +11,13 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import pairwise_distances
 
 from cbp_translate.components.loaders import frame_iterator
-from cbp_translate.modal_ import ROOT, cpu_image, gpu_image, stub, volume
+from cbp_translate.modal_ import ROOT, Container, cpu_image, gpu_image, stub, volume
 
-Arr = np.ndarray
+MTCNN = Any
 FaceId = int
-Image = np.ndarray
+Array = np.ndarray
+BgrImage = np.ndarray
+RgbImage = np.ndarray
 Embedding = np.ndarray
 
 
@@ -29,8 +31,10 @@ class FaceLocation(NamedTuple):
 @dataclass
 class DetectedFace:
     location: FaceLocation
-    image: Image = field(default_factory=partial(np.ndarray, [], dtype=np.uint8))
-    embedding: Embedding = field(default_factory=partial(np.ndarray, [], dtype=np.float64))
+    image: RgbImage = field(default_factory=partial(np.array, [], dtype=np.uint8))
+    embedding: Embedding = field(
+        default_factory=partial(np.array, [], dtype=np.float64)
+    )
 
     @property
     def area(self):
@@ -102,52 +106,23 @@ def _process_face(img: Arr, target_size: tuple[int, int]):
     return img_pixels
 
 
-def _detect_faces(
-    img_path, threshold=0.95, model=None, align=True, allow_upscaling=True
-) -> OnFrameDetected:
+def _detect_faces(mtcnn: MTCNN, img: RgbImage) -> OnFrameDetected:
     """Copied from retinaface.RetinaFace to return both the image and the facial area.
 
     Credits: https://github.com/serengil/retinaface
     """
 
-    from retinaface import RetinaFace
-    from retinaface.commons import postprocess
+    # Local imports are needed for Modal
+    from deepface.detectors import MtcnnWrapper
 
-    faces: OnFrameDetected = []
+    # DeepFace expects BGR
+    img = img[..., ::-1]
+    det = MtcnnWrapper.detect_face(mtcnn, img, align=True)
 
-    img = RetinaFace.get_image(img_path)
-    obj = RetinaFace.detect_faces(
-        img_path=img, threshold=threshold, model=model, allow_upscaling=allow_upscaling
-    )
+    # And we map the results back to RGB
+    det = [(face[..., ::-1], loc) for face, loc in det]
 
-    if type(obj) == dict:
-        for key in obj:  # type: ignore
-            identity = obj[key]  # type: ignore
-
-            facial_area = identity["facial_area"]  # type: ignore
-            facial_img = img[
-                facial_area[1] : facial_area[3], facial_area[0] : facial_area[2]
-            ]  # type: ignore
-
-            if align == True:
-                landmarks = identity["landmarks"]  # type: ignore
-                left_eye = landmarks["left_eye"]
-                right_eye = landmarks["right_eye"]
-                nose = landmarks["nose"]
-
-                try:
-                    # TODO: investigate why retinaface is failing here for some frames
-                    facial_img = postprocess.alignment_procedure(
-                        facial_img, right_eye, left_eye, nose
-                    )
-                except ValueError as e:
-                    continue
-
-            img = facial_img[:, :, ::-1]  # type: ignore
-            loc = FaceLocation(*facial_area)
-            face = DetectedFace(loc, image=img)
-
-            faces.append(face)
+    faces = [DetectedFace(FaceLocation(*facial_area), img) for img, facial_area in det]
 
     return faces
 
@@ -165,7 +140,7 @@ def _filter_faces(
     return faces
 
 
-class GetFaceEmbedding:
+class GetFaceEmbedding(Container):
     """Detect & calculate embeddings for all the faces visible on a single frame"""
 
     kwd = dict(
@@ -178,19 +153,19 @@ class GetFaceEmbedding:
     )
 
     def __enter__(self):
-        """ Load the models only once on container startup"""
+        """Load the models only once on container startup"""
 
         import tensorflow as tf
 
-        assert len(tf.config.list_physical_devices("GPU")) == 0
+        assert len(tf.config.list_physical_devices("GPU")) == 1
 
         from deepface import DeepFace
         from deepface.commons import functions
-        from retinaface import RetinaFace
+        from deepface.detectors import MtcnnWrapper
 
-        self.retina = RetinaFace.build_model()
-        self.model = DeepFace.build_model("ArcFace")
-        self.target_size = functions.find_input_shape(self.model)
+        self.mtcnn = MtcnnWrapper.build_model()
+        self.facenet = DeepFace.build_model("Facenet512")
+        self.target_size = functions.find_input_shape(self.facenet)
 
     @stub.function(**kwd, concurrency_limit=1)
     def download(self):
@@ -198,13 +173,13 @@ class GetFaceEmbedding:
         pass
 
     @stub.function(**kwd, concurrency_limit=100)
-    def f(self, frame: Arr, top_k: int = 3, ratio: float = 3.0):
+    def f(self, frame: RgbImage, top_k: int = 3, ratio: float = 3.0):
         """Actual processing"""
 
         from deepface.commons import functions
 
         # Detect, align, filter out small faces / side views
-        detected = _detect_faces(frame[..., ::-1], align=True, model=self.retina)
+        detected = _detect_faces(mtcnn=self.mtcnn, img=frame)
         detected = _filter_faces(detected, top_k=top_k, ratio=ratio)
         embedded = []
 
@@ -212,8 +187,8 @@ class GetFaceEmbedding:
 
             # Get the embedding using another model
             face_img = _process_face(face.image, self.target_size)
-            face_img = functions.normalize_input(face_img, normalization="base")
-            embedding = np.array(self.model.predict(face_img)[0])
+            face_img = functions.normalize_input(face_img, normalization="Facenet")
+            embedding = np.array(self.facenet.predict(face_img)[0])
 
             # This will be returned for clustering
             embedded.append(DetectedFace(face.location, embedding=embedding))
@@ -222,7 +197,9 @@ class GetFaceEmbedding:
         return embedded
 
 
-def face_clustering(detected: list[OnFrameDetected]) -> Arr:
+def face_clustering(
+    detected: list[OnFrameDetected], metric: str = "euclidean", linkage: str = "ward"
+) -> Array:
     """Cluster faces using AgglomerativeClustering."""
 
     # Fetch the embeddings
@@ -231,9 +208,12 @@ def face_clustering(detected: list[OnFrameDetected]) -> Arr:
     )
 
     # The 0.68 threshold is based on the DeepFace recommended default for the ArcFace model
-    # TODO: test the impact of linkage choice
+    if linkage == "ward":
+        metric = "euclidean"
+
+    threshold = {"euclidean": 23.56, "cosine": 0.40}[metric]
     agc = AgglomerativeClustering(
-        n_clusters=None, affinity="cosine", linkage="average", distance_threshold=0.68  # type: ignore
+        n_clusters=None, affinity=metric, linkage=linkage, distance_threshold=threshold  # type: ignore
     )
     preds = agc.fit_predict(embeddings)
 
@@ -254,7 +234,7 @@ def face_clustering(detected: list[OnFrameDetected]) -> Arr:
 
 @stub.function(image=cpu_image)
 def assign_face_ids(
-    frame_faces: OnFrameDetected, cluster_centers: Arr
+    frame_faces: OnFrameDetected, cluster_centers: Array
 ) -> OnFrameRecognized:
     """Assigns a unique ID to each face in the video."""
 
@@ -272,12 +252,12 @@ def assign_face_ids(
     )
     annotated = []
     for idx, face in enumerate(frame_faces):
-        
+
         # Assign the ID of the closest cluster center
         cluster_idx = np.argmin(distances[idx, :])
         recog = RecognizedFace(int(cluster_idx), face.location)
         annotated.append(recog)
-        
+
         # Remove the ID from the list of available IDs
         distances[:, cluster_idx] = np.inf
 
@@ -299,10 +279,10 @@ def extract_faces(path_in: str) -> list[OnFrameRecognized]:
     # Process the video
     frames = frame_iterator(path_in)
     detected = list(obj.f.map(frames))
-    
+
     # Cluster the embeddings
     cluster_centers = face_clustering(detected)
-    
+
     # Assign a unique ID to each face
     recognized = assign_face_ids.map(
         detected, kwargs={"cluster_centers": cluster_centers}
