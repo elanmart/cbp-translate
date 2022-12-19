@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 import cv2
 import modal
@@ -10,7 +10,7 @@ import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import pairwise_distances
 
-from cbp_translate.components.loaders import frame_iterator
+from cbp_translate.components.loaders import frame_iterator, get_video_metadata
 from cbp_translate.modal_ import ROOT, Container, cpu_image, gpu_image, stub, volume
 
 MTCNN = Any
@@ -59,7 +59,7 @@ OnFrameDetected = list[DetectedFace]
 OnFrameRecognized = list[RecognizedFace]
 
 
-def _process_face(img: Arr, target_size: tuple[int, int]):
+def _process_face(img: RgbImage, target_size: tuple[int, int]):
     """Copied from DeepFace.commons.functions.preprocess_face
     We had to make minor tweaks for our use case.
 
@@ -121,8 +121,12 @@ def _detect_faces(mtcnn: MTCNN, img: RgbImage) -> OnFrameDetected:
 
     # And we map the results back to RGB
     det = [(face[..., ::-1], loc) for face, loc in det]
+    faces = []
 
-    faces = [DetectedFace(FaceLocation(*facial_area), img) for img, facial_area in det]
+    for (img, (x, y, w, h)) in det:
+        loc = FaceLocation(x, y, x + w, y + h)
+        face = DetectedFace(location=loc, image=img)
+        faces.append(face)
 
     return faces
 
@@ -188,7 +192,7 @@ class GetFaceEmbedding(Container):
             # Get the embedding using another model
             face_img = _process_face(face.image, self.target_size)
             face_img = functions.normalize_input(face_img, normalization="Facenet")
-            embedding = np.array(self.facenet.predict(face_img)[0])
+            embedding = np.array(self.facenet.predict(face_img, verbose=0)[0])
 
             # This will be returned for clustering
             embedded.append(DetectedFace(face.location, embedding=embedding))
@@ -198,7 +202,10 @@ class GetFaceEmbedding(Container):
 
 
 def face_clustering(
-    detected: list[OnFrameDetected], metric: str = "euclidean", linkage: str = "ward"
+    detected: list[OnFrameDetected],
+    metric: str = "euclidean",
+    linkage: str = "ward",
+    threshold: Optional[float] = None,
 ) -> Array:
     """Cluster faces using AgglomerativeClustering."""
 
@@ -211,7 +218,9 @@ def face_clustering(
     if linkage == "ward":
         metric = "euclidean"
 
-    threshold = {"euclidean": 23.56, "cosine": 0.40}[metric]
+    if threshold is None:
+        threshold = {"euclidean": 23.56, "cosine": 0.30}[metric]
+
     agc = AgglomerativeClustering(
         n_clusters=None, affinity=metric, linkage=linkage, distance_threshold=threshold  # type: ignore
     )
@@ -224,8 +233,9 @@ def face_clustering(
 
     # Compute the mean embedding for each cluster
     # TODO: can you read it out fromt the agc tree?
-    centers = np.empty((len(inds), embeddings.shape[1]))
-    for i in range(agc.n_clusters_):
+    n_clusters = len(inds)
+    centers = np.empty((n_clusters, embeddings.shape[1]))
+    for i in range(n_clusters):
         index = inds[i]
         centers[i] = embeddings[preds == index].mean(axis=0)
 
@@ -264,14 +274,7 @@ def assign_face_ids(
     return annotated
 
 
-@stub.function(
-    image=cpu_image, memory=6000, shared_volumes={str(ROOT): volume}, timeout=30 * 60
-)
-def extract_faces(path_in: str) -> list[OnFrameRecognized]:
-    """For each frame, detect faces and extract their embeddings.
-    Then cluster the embeddings, and assign a unique id to each face in the video stream.
-    """
-
+def detect_faces(path_in: str) -> list[OnFrameDetected]:
     # Trigger model download
     obj = GetFaceEmbedding()
     _ = obj.download.call()
@@ -280,8 +283,12 @@ def extract_faces(path_in: str) -> list[OnFrameRecognized]:
     frames = frame_iterator(path_in)
     detected = list(obj.f.map(frames))
 
+    return detected
+
+
+def recognize_faces(detected: list[OnFrameDetected]):
     # Cluster the embeddings
-    cluster_centers = face_clustering(detected)
+    cluster_centers = face_clustering(detected, metric="cosine", linkage="average", threshold=0.3)
 
     # Assign a unique ID to each face
     recognized = assign_face_ids.map(
@@ -293,3 +300,69 @@ def extract_faces(path_in: str) -> list[OnFrameRecognized]:
 
     # Done
     return recognized
+
+
+def filter_flickering(
+    recognized: list[OnFrameRecognized], fps: int, window: float = 1.0
+) -> list[OnFrameRecognized]:
+    """Filter out flickering faces."""
+
+    ids: list[set[int]] = []
+    for r in recognized:
+        ids.append({f.person_id for f in r})
+
+    filtered = []
+    active = set()
+
+    for i, items in enumerate(recognized):
+
+        kept = []
+        local_ids = set()
+
+        for face in items:
+
+            # Check if the face is on screen for the next `window` seconds
+            # If it is, mark it as active, otherwise we ignore it
+            if face.person_id not in active:
+
+                last = min(i + int(window * fps) + 1, len(ids))
+                for j in range(i + 1, last):
+                    if face.person_id not in ids[j]:
+                        break
+                else:
+                    active.add(face.person_id)
+
+            # Keep only the active one, and also add a sanity check
+            # To avoid two faces with the same ID (which can happen due to naive clustering)
+            # Note that faces are ordered by size, so the first one is the largest
+            # which makes it OK to ignore the other ones
+            if (face.person_id in active) and (face.person_id not in local_ids):
+                kept.append(face)
+                local_ids.add(face.person_id)
+
+            # De-activate missing faces
+            active = {a for a in active if a in ids[i]}
+
+        filtered.append(kept)
+
+    # Re-map face IDs
+    new_ids = {}
+    for sublist in filtered:
+        for face in sublist:
+            if face.person_id not in new_ids:
+                new_ids[face.person_id] = len(new_ids)
+            face.person_id = new_ids[face.person_id]
+
+    return filtered
+
+
+@stub.function(
+    image=cpu_image, memory=6000, shared_volumes={str(ROOT): volume}, timeout=30 * 60
+)
+def extract_faces(path_in: str) -> list[OnFrameRecognized]:
+    fps, _, _ = get_video_metadata(path_in)
+    detected = detect_faces(path_in)
+    recognized = recognize_faces(detected)
+    filtered = filter_flickering(recognized, fps=fps)
+
+    return filtered
