@@ -92,7 +92,7 @@ def add_subtitles(
 
 def add_borders(frame: Arr, size: float = 0.1) -> tuple[Arr, int]:
     """Add black borders to the top and bottom of a frame. That's where the subtitles will be displayed."""
-    
+
     height, width, _ = frame.shape
     border_h = int(round(size * height))
     border = np.zeros((border_h, width, 3), np.uint8)

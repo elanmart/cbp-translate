@@ -88,8 +88,7 @@ def translate_segments(
     # Debug
     if not auth_key:
         return [
-            TranslatedSegment(s.start, s.end, s.text_src, s.text_src)
-            for s in segments
+            TranslatedSegment(s.start, s.end, s.text_src, s.text_src) for s in segments
         ]
 
     # We feed the entire text to DeepL at once, even though it might come from multiple speakers

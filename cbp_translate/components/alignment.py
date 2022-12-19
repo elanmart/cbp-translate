@@ -58,8 +58,7 @@ def match_speakers_to_faces(
         end = min(end, n_frames - 1)
         for i in range(start + 1, end):
             voices[segment.id_].add(i)
-            
-            
+
     face_appears = defaultdict(set)
 
     for i, sublist in enumerate(faces):
@@ -69,7 +68,9 @@ def match_speakers_to_faces(
     ret = {}
 
     for face_id in face_appears:
-        speaker = max(voices, key=lambda speaker: jaccard(voices[speaker], face_appears[face_id]))
+        speaker = max(
+            voices, key=lambda speaker: jaccard(voices[speaker], face_appears[face_id])
+        )
         ret[face_id] = speaker
 
     return ret

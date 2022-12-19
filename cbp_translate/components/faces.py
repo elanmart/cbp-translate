@@ -288,7 +288,9 @@ def detect_faces(path_in: str) -> list[OnFrameDetected]:
 
 def recognize_faces(detected: list[OnFrameDetected]):
     # Cluster the embeddings
-    cluster_centers = face_clustering(detected, metric="cosine", linkage="average", threshold=0.3)
+    cluster_centers = face_clustering(
+        detected, metric="cosine", linkage="average", threshold=0.3
+    )
 
     # Assign a unique ID to each face
     recognized = assign_face_ids.map(
