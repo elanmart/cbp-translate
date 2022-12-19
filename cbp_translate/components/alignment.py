@@ -44,37 +44,35 @@ def match_speakers_to_faces(
 
     """Match speaker IDs to Face IDs by simple co-occurrence metric."""
 
-    # Convert the timestamp to frame index
     def idx(t: float) -> int:
         return math.ceil(t * fps)
 
-    # All voices heard in a given frame (you know what I mean)
-    voices = [[] for _ in range(n_frames)]
+    def jaccard(s0: set, s1: set):
+        return len(s0 & s1) / len(s0 | s1)
 
-    # Add all voices to the list
+    voices = defaultdict(set)
+
     for segment in speakers:
         start = idx(segment.start)
         end = idx(segment.end)
         end = min(end, n_frames - 1)
         for i in range(start + 1, end):
-            voices[i].append(segment.id_)
+            voices[segment.id_].add(i)
+            
+            
+    face_appears = defaultdict(set)
 
-    # Count the overlap between faces and voices
-    coocurrence = defaultdict(lambda: defaultdict(int))
-    for frame_voices, frame_faces in zip(voices, faces):
-        for face in frame_faces:
-            for voice in frame_voices:
-                voice = cast(str, voice)
-                coocurrence[face.person_id][voice] += 1
+    for i, sublist in enumerate(faces):
+        for f in sublist:
+            face_appears[f.person_id].add(i)
 
-    # find the best match
-    matched = {}
-    for face_id in coocurrence:
-        # x[1] here is selecting the count from a (voice_id, count) pair
-        voice_id, count = max(coocurrence[face_id].items(), key=lambda x: x[1])
-        matched[face_id] = voice_id
+    ret = {}
 
-    return matched
+    for face_id in face_appears:
+        speaker = max(voices, key=lambda speaker: jaccard(voices[speaker], face_appears[face_id]))
+        ret[face_id] = speaker
+
+    return ret
 
 
 def match_speakers_to_phrases(
