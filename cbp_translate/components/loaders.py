@@ -69,12 +69,9 @@ def extract_audio(path: str, path_out: Optional[str] = None):
     return path_out
 
 
-def save_frames(frames: Iterator[Arr], fps: int, path_out: str):
+def save_frames(frames: Iterator[Arr], fps: int, path_out: str, height: int, width: int):
     """Save frames to a video file using ffmpeg"""
 
-    frames = iter(frames)
-    first = next(frames)
-    height, width = first.shape[:2]
     video = ffmpeg.input(
         "pipe:",
         format="rawvideo",
