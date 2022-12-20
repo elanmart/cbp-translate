@@ -1,8 +1,8 @@
 """ Runs the app using Modal """
 
 import shutil
-import sys
 import tempfile
+from functools import partial
 from logging import basicConfig, getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory as TempDir
@@ -14,17 +14,17 @@ from gradio.routes import mount_gradio_app
 
 from cbp_translate.components.download import download
 from cbp_translate.components.translation import LANGUAGES
-from cbp_translate.modal_ import ROOT, cpu_image, stub, volume
+from cbp_translate.modal_ import SHARED, cpu_image, stub, volume
 from cbp_translate.pipeline import Config, run
 
-
 basicConfig(level="INFO", format="%(asctime)s :: %(levelname)s :: %(message)s")
-resources = Path(__file__).parent / ".resources"
+
+examples = Path(__file__).parent / "assets" / "videos"
 logger = getLogger(__name__)
 web_app = FastAPI()
 
 
-def maybe_download(url: str, video: str) -> Path:
+def check_input(url: str, video: str) -> Path:
     """If a URL was provided, download it to a temporary directory.
     Otherwise, use the uploaded video file.
     """
@@ -51,12 +51,10 @@ def check_language(language: str) -> str:
     return lang_key
 
 
-def main(url: str, video: str, language: str):
+def main(tempdir_root: str, url: str = "", video: str = "", language: str = ""):
     """Produce a processed video"""
 
-    # Create a temporary storage on a shared Modal volume
-    (tmp := (ROOT / "tmp")).mkdir(exist_ok=True)
-    with TempDir(dir=tmp) as shared_tmp:
+    with TempDir(dir=tempdir_root) as shared_tmp:
 
         # Config
         shared_tmp = Path(shared_tmp)
@@ -64,7 +62,7 @@ def main(url: str, video: str, language: str):
         config = Config(target_lang=lang, speaker_markers=True)
 
         # Download the video and move the file to a shared volume
-        local_input = maybe_download(url, video)
+        local_input = check_input(url, video)
         shared_input = shared_tmp / local_input.name
         shutil.move(local_input, shared_input)
 
@@ -72,6 +70,7 @@ def main(url: str, video: str, language: str):
         shared_output = run.call(
             path_in=str(shared_input),
             path_out=str(shared_tmp / "translated.mp4"),
+            path_tmp=str(shared_tmp),
             config=config,
         )
 
@@ -83,64 +82,37 @@ def main(url: str, video: str, language: str):
     return local_output
 
 
-@stub.function(
+@stub.asgi(
     image=cpu_image,
-    shared_volumes={str(ROOT): volume},
-    mounts=[modal.Mount("/resources", local_dir="./samples")],
+    shared_volumes={str(SHARED): volume},
+    mounts=[modal.Mount(local_dir=examples, remote_dir="/resources")],
     concurrency_limit=10,
-    secret=modal.Secret({"DEEPFACE_HOME": str(ROOT)}),
-    timeout=10_000,
 )
-def _app_(item):
-    filename, language = item
-    out = main("", f"/resources/{filename}", language)
-    with open(out, "rb") as f:
-        return filename, f.read()
+def fastapi_app():
 
+    tempdir_root = (SHARED / "tmp")
+    tempdir_root.mkdir(exist_ok=True)
 
-if __name__ == "__main__":
+    interface = gr.Interface(
+        fn=partial(main, str(tempdir_root)),
+        title="AutoTranslate",
+        inputs=[
+            gr.Text(label="YouTube URL"),
+            gr.Video(label="Video"),
+            gr.Dropdown(list(LANGUAGES.keys()), label="Target Language"),
+        ],
+        examples=[
+            ["", "/resources/keanu-reeves-interview.mp4", "Polish"],
+            ["", "/resources/keanu-reeves-interview-short.mp4", "Polish"],
+            ["", "/resources/dukaj-onet-interview.mp4", "English (British)"],
+            ["", "/resources/dukaj-outdoor-interview.mp4", "English (British)"],
+            ["", "/resources/political-interview-RMF.mp4", "English (British)"],
+        ],
+        outputs=gr.Video(),
+    )
 
-    args = [
-        ("dukaj-onet-60s.mp4", "English (British)"),
-        ("dukaj-outdoor.mp4", "English (British)"),
-        ("dukaj-progress.mp4", "English (British)"),
-        ("rmf-tusk-rzecznik.mp4", "English (British)"),
-    ]
-
-    with stub.run():
-        outputs = _app_.map(args)
-        for name_in, content in outputs:
-            name_out = name_in.split(".")[0] + ".translated.mp4"
-            with open(f"outputs/{name_out}", "wb") as f:
-                f.write(content)
-
-
-# @stub.asgi(
-#     image=cpu_image,
-#     shared_volumes={str(ROOT): volume},
-#     mounts=[modal.Mount("/resources", local_dir=resources)],
-#     concurrency_limit=10,
-# )
-# def fastapi_app():
-
-#     interface = gr.Interface(
-#         fn=main,
-#         title="AutoTranslate",
-#         inputs=[
-#             gr.Text(label="YouTube URL"),
-#             gr.Video(label="Video"),
-#             gr.Dropdown(list(LANGUAGES.keys()), label="Target Language"),
-#         ],
-#         examples=[
-#             ["", "/resources/foo.mp4", "Polish"],
-#             ["", "/resources/bar.mp4", "English"],
-#             ["", "/resources/baz.mp4", "English"],
-#         ],
-#         outputs=gr.Video(),
-#     )
-
-#     return mount_gradio_app(
-#         app=web_app,
-#         blocks=interface,
-#         path="/",
-#     )
+    return mount_gradio_app(
+        app=web_app,
+        blocks=interface,
+        path="/",
+    )
