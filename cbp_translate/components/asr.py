@@ -1,9 +1,9 @@
-""" ASR - automatic speech recognition. """
+""" ASR - automatic speech recognition using Whisper. """
 
 from dataclasses import dataclass
 from typing import cast
 
-from cbp_translate.modal_ import ROOT, gpu_image, stub, volume
+from cbp_translate.modal_ import SHARED, gpu_image, stub, volume
 
 
 @dataclass
@@ -16,7 +16,7 @@ class SpeechSegment:
 @stub.function(
     image=gpu_image,
     gpu=True,
-    shared_volumes={str(ROOT): volume},
+    shared_volumes={str(SHARED): volume},
     memory=12287,
     timeout=30 * 60,
 )
@@ -28,7 +28,7 @@ def extract_segments(path: str) -> list[SpeechSegment]:
 
     # Note that we're downloading the model to a shared volume
     model = whisper.load_model(
-        "large", device="cuda", download_root=str(ROOT / "whisper")
+        "large", device="cuda", download_root=str(SHARED / "whisper")
     )
     result = whisper.transcribe(model, path)
 

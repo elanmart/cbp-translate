@@ -11,7 +11,7 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import pairwise_distances
 
 from cbp_translate.components.loaders import frame_iterator, get_video_metadata
-from cbp_translate.modal_ import ROOT, Container, cpu_image, gpu_image, stub, volume
+from cbp_translate.modal_ import SHARED, Container, cpu_image, gpu_image, stub, volume
 
 MTCNN = Any
 FaceId = int
@@ -152,8 +152,8 @@ class GetFaceEmbedding(Container):
         gpu=False,
         memory=8000,
         cpu=1,
-        shared_volumes={str(ROOT): volume},
-        secret=modal.Secret({"DEEPFACE_HOME": str(ROOT)}),
+        shared_volumes={str(SHARED): volume},
+        secret=modal.Secret({"DEEPFACE_HOME": str(SHARED)}),
     )
 
     def __enter__(self):
@@ -359,7 +359,7 @@ def filter_flickering(
 
 
 @stub.function(
-    image=cpu_image, memory=6000, shared_volumes={str(ROOT): volume}, timeout=30 * 60
+    image=cpu_image, memory=6000, shared_volumes={str(SHARED): volume}, timeout=30 * 60
 )
 def extract_faces(path_in: str) -> list[OnFrameRecognized]:
     fps, _, _ = get_video_metadata(path_in)
