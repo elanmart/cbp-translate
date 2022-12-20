@@ -35,7 +35,7 @@ As for the timelines -- it definatelly took me more time than I anticipated, but
 
 Here's a 60s clip of an interview conducted in Polish, translated to English. You can see that we a very clean setup like this, the results actually look quite OK!
 
-https://user-images.githubusercontent.com/10772830/208771232-5fe452a6-9046-48eb-88d5-a5df37882ae5.mp4
+https://user-images.githubusercontent.com/10772830/208771745-37e64474-438b-418d-a99b-58c11657d5f2.mp4
 
 And here's a part of an interview with Keanu Reeves (who plays a major character in Cyberpunk 2077) talking to Steven Colbert, translated to Polish.
 
