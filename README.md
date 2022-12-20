@@ -268,7 +268,7 @@ So with minimal boilerplate we now have a code that can run remotely **within se
 There are obviously still some rough edges (`Modal` is still in beta), and I had to work around one last issue: when running a `FastAPI` app, there is a 45 second limit for each request. And since processing a video takes a bit longer, I used a not-so-nice workaround, where pressing `Submit` for the first time gives you the job id, and you can use that id to fetch the final result:
 
 <p align="center">
-    <img src="assets/resources/modal-step-2.png" alt="Gradio Screenshot", width="70%">
+    <img src="assets/resources/modal-step-1.png" alt="Gradio Screenshot", width="70%">
 </p>
 
 # Limitations
