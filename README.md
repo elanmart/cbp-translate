@@ -35,13 +35,14 @@ As for the timelines -- it definatelly took me more time than I anticipated, but
 
 Anyway, here's a 30s sample of Keanu Reeves (who plays a major character in Cyberpunk 2077) talking to Steven Colbert, translated to Polish (note that the speaker diarization is not perfect in this example)
 
-< keanu-reeves-interview >
+https://user-images.githubusercontent.com/10772830/208771178-632b180a-231e-4a77-b578-f18cd23c3697.mp4
 
 And here's a 60s clip of an interview conducted in Polish, translated to English.
 
 You can see that we a very clean setup like this, the results actually look quite OK!
 
-< political-interview-RMF >
+https://user-images.githubusercontent.com/10772830/208771232-5fe452a6-9046-48eb-88d5-a5df37882ae5.mp4
+
 
 # 2. Implementation 
 
