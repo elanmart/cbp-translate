@@ -1,7 +1,6 @@
 """ Combines all processing steps into an end-to-end live translation pipeline."""
 
 import os
-import tempfile
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
@@ -111,8 +110,8 @@ def annotate_frame(item: tuple[Arr, FrameMetadata], config: Config) -> Arr:
     secret=deepl_secret,
     shared_volumes={str(SHARED): volume},
     cpu=1.1,
-    memory=6000,
-    timeout=10_000,
+    memory=8000,
+    timeout=60 * 60,
 )
 def run(path_in: str, path_out: str, path_tmp: str, config: Config) -> Path:
     """Runs the end-to-end live translation pipeline.
@@ -134,7 +133,7 @@ def run(path_in: str, path_out: str, path_tmp: str, config: Config) -> Path:
     deepl_key = os.getenv("DEEPL_KEY", "")
     path_audio = os.path.join(path_tmp, "audio.wav")
     path_video = os.path.join(path_tmp, "video.mp4")
-    fps, length, _ = get_video_metadata(path_in)
+    fps, length, (height, width) = get_video_metadata(path_in)
 
     # Run the backbone extraction
     path_audio = extract_audio(path_in, path_audio)
@@ -166,12 +165,13 @@ def run(path_in: str, path_out: str, path_tmp: str, config: Config) -> Path:
     )
 
     # Add the metadata to each frame. We parallelize this since it's quite slow otherwise.
+    assert len(aligned) == length
     frames = frame_iterator(path_in)
     items = zip(frames, aligned)
     processed = annotate_frame.map(items, kwargs={"config": config})
 
     # Now save the frames to an mp4 and add the original audio
-    save_frames(processed, fps, path_video)
+    save_frames(processed, fps, path_video, height=height, width=width)
     combine_streams(path_video, path_audio, path_out)
 
     # We're done here
