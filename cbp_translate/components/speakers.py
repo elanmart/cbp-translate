@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from cbp_translate.modal_ import SHARED, gpu_image, nemo_secret, hf_secret, stub, volume
+from cbp_translate.modal_ import SHARED, gpu_image, hf_secret, nemo_secret, stub, volume
 
 
 @dataclass
@@ -41,7 +41,7 @@ def parse_nemo_output(path: str):
     results = Path(path).read_text()
     lines = results.splitlines()
     lines = [line.strip() for line in lines if len(line.strip()) > 1]
-    
+
     ret = []
     for line in lines:
         _, _, _, t0, duration, _, _, ID, *_ = line.split()
@@ -64,8 +64,21 @@ def extract_speakers(path: str, combine: bool = True) -> list[SpeakerSegment]:
 
     # Local imports are required by Modal
     import wget
+    from librosa import core
     from nemo.collections.asr.models import ClusteringDiarizer
     from omegaconf import OmegaConf
+
+    # TODO: here we need to hack our way around Librosa bug.
+    # We feed in two-channel audio, but `librosa.core.resample` ignores the axis argument
+    # Perhaps we could figure out a way to save the audio as mono, but this was easier to do:
+    old_resample = core.resample
+
+    def resample(y, *args, **kwargs):
+        if y.ndim == 2:
+            y = y.mean(axis=1)
+        return old_resample(y, *args, **kwargs)
+
+    core.resample = resample
 
     meta = {
         "audio_filepath": path,
@@ -110,7 +123,13 @@ def extract_speakers(path: str, combine: bool = True) -> list[SpeakerSegment]:
         0.375,
         0.1,
     ]
-    config.diarizer.speaker_embeddings.parameters.multiscale_weights = [1, 1, 1, 1, 1]
+    config.diarizer.speaker_embeddings.parameters.multiscale_weights = [
+        1,
+        1,
+        1,
+        1,
+        1,
+    ]
     config.diarizer.oracle_vad = False
     config.diarizer.clustering.parameters.oracle_num_speakers = False
 
