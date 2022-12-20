@@ -160,9 +160,6 @@ class GetFaceEmbedding(Container):
         """Load the models only once on container startup"""
 
         import tensorflow as tf
-
-        assert len(tf.config.list_physical_devices("GPU")) == 1
-
         from deepface import DeepFace
         from deepface.commons import functions
         from deepface.detectors import MtcnnWrapper
@@ -171,7 +168,7 @@ class GetFaceEmbedding(Container):
         self.facenet = DeepFace.build_model("Facenet512")
         self.target_size = functions.find_input_shape(self.facenet)
 
-    @stub.function(**kwd, concurrency_limit=1)
+    @stub.function(**kwd, concurrency_limit=1, timeout=10 * 60)
     def download(self):
         """Dummy function triggering the download to the shared storage"""
         pass
@@ -242,7 +239,7 @@ def face_clustering(
     return centers
 
 
-@stub.function(image=cpu_image)
+@stub.function(image=cpu_image, timeout=30 * 60)
 def assign_face_ids(
     frame_faces: OnFrameDetected, cluster_centers: Array
 ) -> OnFrameRecognized:
