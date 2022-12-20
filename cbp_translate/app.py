@@ -1,44 +1,25 @@
 """ Runs the app using Modal """
 
-import shutil
 import tempfile
 from functools import partial
 from logging import basicConfig, getLogger
 from pathlib import Path
-from tempfile import TemporaryDirectory as TempDir
+from typing import Optional
 
 import gradio as gr
-import modal
 from fastapi import FastAPI
 from gradio.routes import mount_gradio_app
+from modal.functions import FunctionCall
 
-from cbp_translate.components.download import download
 from cbp_translate.components.translation import LANGUAGES
 from cbp_translate.modal_ import SHARED, cpu_image, stub, volume
 from cbp_translate.pipeline import Config, run
 
 basicConfig(level="INFO", format="%(asctime)s :: %(levelname)s :: %(message)s")
 
-examples = Path(__file__).parent / "assets" / "videos"
+examples = Path(__file__).parent.parent / "assets" / "videos"
 logger = getLogger(__name__)
 web_app = FastAPI()
-
-
-def check_input(url: str, video: str) -> Path:
-    """If a URL was provided, download it to a temporary directory.
-    Otherwise, use the uploaded video file.
-    """
-
-    if url:
-        tmp = Path(tempfile.mkdtemp())
-        path_tmpl = tmp / "input"
-        path_in = download(url, path_tmpl)
-    elif video:
-        path_in = Path(video)
-    else:
-        raise ValueError("Both URL and video are missing.")
-
-    return path_in
 
 
 def check_language(language: str) -> str:
@@ -51,64 +32,94 @@ def check_language(language: str) -> str:
     return lang_key
 
 
-def main(tempdir_root: str, url: str = "", video: str = "", language: str = ""):
+@stub.function(
+    image=cpu_image,
+    shared_volumes={str(SHARED): volume},
+    timeout=30 * 60,
+)
+def main(
+    storage: str, language: str = "", video: bytes = b"", suffix: str = ".mp4"
+) -> bytes:
     """Produce a processed video"""
 
-    with TempDir(dir=tempdir_root) as shared_tmp:
+    # Create a dedicated directory for this run
+    with tempfile.TemporaryDirectory(dir=storage) as tmp:
 
-        # Config
-        shared_tmp = Path(shared_tmp)
+        # Configuration
+        dirpath = Path(tmp)
         lang = check_language(language)
         config = Config(target_lang=lang, speaker_markers=True)
 
         # Download the video and move the file to a shared volume
-        local_input = check_input(url, video)
-        shared_input = shared_tmp / local_input.name
-        shutil.move(local_input, shared_input)
+        shared_input = (dirpath / "input").with_suffix(suffix)
+        shared_input.write_bytes(video)
 
-        # Produce the output, storing it on a shared volume as well
-        shared_output = run.call(
+        # Produce the output
+        shared_output: Path = run.call(
             path_in=str(shared_input),
-            path_out=str(shared_tmp / "translated.mp4"),
-            path_tmp=str(shared_tmp),
+            path_out=str(dirpath / "translated.mp4"),
+            path_tmp=str(dirpath),
             config=config,
         )
 
-        # Move the output back to the local filesystem
-        local_output = Path(tempfile.mkdtemp()) / shared_output.name
-        shutil.move(shared_output, local_output)
+        return shared_output.read_bytes()
 
-    # TODO: double-check that local temporary storage gets cleaned up properly
-    return local_output
+
+def result(text: str = "", video: Optional[str] = None):
+    return [text, video]
+
+
+def submit(storage: str, job_id: str, video: str, language: str):
+    """A helper utility to get around Modal's 45 sec timeout for @asgi apps."""
+
+    if job_id:
+        call = FunctionCall.from_id(job_id)
+        try:
+            output = call.get(timeout=0)
+        except TimeoutError:
+            return result(text="Not ready.")
+        else:
+            path = Path(tempfile.mkdtemp()) / "output.mp4"
+            path.write_bytes(output)
+            return result(text="Ready", video=str(path))
+
+    else:
+
+        path = Path(video)
+        call = main.spawn(
+            storage=storage,
+            video=path.read_bytes(),
+            suffix=path.suffix,
+            language=language,
+        )
+
+        return result(text=call.object_id)
 
 
 @stub.asgi(
     image=cpu_image,
     shared_volumes={str(SHARED): volume},
-    mounts=[modal.Mount(local_dir=examples, remote_dir="/resources")],
     concurrency_limit=10,
+    # TODO: somehow Gradio refuses to use the examples mounted this way:
+    #   mounts=[modal.Mount(local_dir=examples, remote_dir="/videos")],
 )
 def fastapi_app():
 
-    tempdir_root = (SHARED / "tmp")
+    tempdir_root = SHARED / "tmp"
     tempdir_root.mkdir(exist_ok=True)
 
     interface = gr.Interface(
-        fn=partial(main, str(tempdir_root)),
+        fn=partial(submit, str(tempdir_root)),
         title="AutoTranslate",
         inputs=[
-            gr.Text(label="YouTube URL"),
+            gr.Textbox(label="Existing Job ID"),
             gr.Video(label="Video"),
             gr.Dropdown(list(LANGUAGES.keys()), label="Target Language"),
         ],
-        examples=[
-            ["", "/resources/keanu-reeves-interview.mp4", "Polish"],
-            ["", "/resources/keanu-reeves-interview-short.mp4", "Polish"],
-            ["", "/resources/dukaj-onet-interview.mp4", "English (British)"],
-            ["", "/resources/dukaj-outdoor-interview.mp4", "English (British)"],
-            ["", "/resources/political-interview-RMF.mp4", "English (British)"],
+        outputs=[
+            gr.Textbox(label=" <--- Paste this into the box on the left"),
+            gr.Video(label="Output"),
         ],
-        outputs=gr.Video(),
     )
 
     return mount_gradio_app(
@@ -116,3 +127,7 @@ def fastapi_app():
         blocks=interface,
         path="/",
     )
+
+
+if __name__ == "__main__":
+    stub.serve()
