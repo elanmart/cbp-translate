@@ -55,6 +55,12 @@ class Stub:
 
         return wrapper
 
+    def asgi(self, *args, **kwargs):
+        def wrapper(f):
+            return f
+
+        return wrapper
+
     @contextmanager
     def run(self, *args, **kwargs):
         yield
