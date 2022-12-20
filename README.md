@@ -33,15 +33,15 @@ The off-the-shelf tools are quite roboust, and mostly extremely easy to integrat
 
 As for the timelines -- it definatelly took me more time than I anticipated, but actually most of the time was spent on non-ML issues (like figuring out how to add Unicode characters to a video frame).
 
-Anyway, here's a 30s sample of Keanu Reeves (who plays a major character in Cyberpunk 2077) talking to Steven Colbert, translated to Polish (note that the speaker diarization is not perfect in this example)
-
-https://user-images.githubusercontent.com/10772830/208771178-632b180a-231e-4a77-b578-f18cd23c3697.mp4
-
-And here's a 60s clip of an interview conducted in Polish, translated to English.
-
-You can see that we a very clean setup like this, the results actually look quite OK!
+Here's a 60s clip of an interview conducted in Polish, translated to English. You can see that we a very clean setup like this, the results actually look quite OK!
 
 https://user-images.githubusercontent.com/10772830/208771232-5fe452a6-9046-48eb-88d5-a5df37882ae5.mp4
+
+And here's a part of an interview with Keanu Reeves (who plays a major character in Cyberpunk 2077) talking to Steven Colbert, translated to Polish.
+
+Note that in this case the speaker diarization is not perfect, and the speaker IDs get mixed up for a moment mid-video:
+
+https://user-images.githubusercontent.com/10772830/208771178-632b180a-231e-4a77-b578-f18cd23c3697.mp4
 
 
 # 2. Implementation 
