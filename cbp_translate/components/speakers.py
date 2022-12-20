@@ -36,7 +36,10 @@ def combine_segments(speakers: list[SpeakerSegment]) -> list[SpeakerSegment]:
 
 
 def parse_nemo_output(path: str):
-    """Parse the output of the Nemo diarization model."""
+    """Parse the output of the Nemo diarization model.
+    
+    TODO: there's probably an rttm reader available in NeMo that we could re-use here?
+    """
 
     results = Path(path).read_text()
     lines = results.splitlines()
@@ -80,6 +83,11 @@ def extract_speakers(path: str, combine: bool = True) -> list[SpeakerSegment]:
 
     core.resample = resample
 
+    # The following code was adapted from the NeMo example notebooks
+    # see: https://github.com/NVIDIA/NeMo
+
+    # The code is quite messy, but this is because NeMo does not provide
+    # a clean HF- / sklearn-like interface, so we need to hack our way around that
     meta = {
         "audio_filepath": path,
         "offset": 0,
@@ -139,9 +147,13 @@ def extract_speakers(path: str, combine: bool = True) -> list[SpeakerSegment]:
     config.diarizer.vad.parameters.offset = 0.6
     config.diarizer.vad.parameters.pad_offset = -0.05
 
+    # These two lines will run the speaker diarization,
+    # but the results are not returned explicitly.
+    # They are written to path selected in the manifest
     sd_model = ClusteringDiarizer(cfg=config)  # type: ignore
     sd_model.diarize()
 
+    # We need to fetch and parse those results
     rttm = output_dir / "pred_rttms" / Path(path).with_suffix(".rttm").name
     parsed = parse_nemo_output(str(rttm))
 
