@@ -3,7 +3,7 @@
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, cast
+from typing import Iterable, Optional
 
 from cbp_translate.components.faces import FaceLocation, OnFrameRecognized
 from cbp_translate.components.speakers import SpeakerSegment
