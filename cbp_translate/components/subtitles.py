@@ -90,11 +90,21 @@ def add_subtitles(
     return np.array(img)
 
 
+def get_border_h(height: int, border_size: float) -> int:
+    border_h = int(round(border_size * height))
+    return border_h
+
+
+def get_annotated_h(height: int, border_size: float) -> int:
+    border_h = get_border_h(height, border_size)
+    return height + border_h * 2
+
+
 def add_borders(frame: Arr, size: float = 0.1) -> tuple[Arr, int]:
     """Add black borders to the top and bottom of a frame. That's where the subtitles will be displayed."""
 
     height, width, _ = frame.shape
-    border_h = int(round(size * height))
+    border_h = get_border_h(height, size)
     border = np.zeros((border_h, width, 3), np.uint8)
     frame = np.concatenate((border, frame, border), axis=0)
 

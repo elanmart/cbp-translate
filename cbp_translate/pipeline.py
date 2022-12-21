@@ -27,6 +27,7 @@ from cbp_translate.components.subtitles import (
     add_borders,
     add_speaker_marker,
     add_subtitles,
+    get_annotated_h,
 )
 from cbp_translate.components.translation import translate_segments
 from cbp_translate.modal_ import SHARED, cpu_image, deepl_secret, stub, volume
@@ -171,6 +172,7 @@ def run(path_in: str, path_out: str, path_tmp: str, config: Config) -> Path:
     processed = annotate_frame.map(items, kwargs={"config": config})
 
     # Now save the frames to an mp4 and add the original audio
+    height = get_annotated_h(height, config.border_size)
     save_frames(processed, fps, path_video, height=height, width=width)
     combine_streams(path_video, path_audio, path_out)
 
