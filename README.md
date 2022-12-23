@@ -2,7 +2,7 @@
 
 # 1.1 The main idea
 
-I finally got around to play [Cyberpunk 2077](https://www.gog.com/en/game/cyberpunk_2077) the other day, and I noticed that the game has one interesting feature: 
+I finally got around to playing [Cyberpunk 2077](https://www.gog.com/en/game/cyberpunk_2077) the other day, and I noticed that the game has one interesting feature: 
 
 when a character speaks a foreign language, the text first appears above them in the original form, and then gets sort of live-translated into English.
 
