@@ -27,11 +27,11 @@ I wanted to have a system which would
 
 ## 1.3 The TL;DR
 
-With the amazing ML ecosystem we have today, it's definatelly possible to build a PoC of a system like that in a couple of evenings. 
+With the amazing ML ecosystem we have today, it's definitely possible to build a PoC of a system like that in a couple of evenings. 
 
-The off-the-shelf tools are quite roboust, and mostly extremely easy to integrate. What's more, the abundance of pre-trained models meant that I could build the whole app without running a single gradient update, or hand-labeling a single example.
+The off-the-shelf tools are quite robust, and mostly extremely easy to integrate. What's more, the abundance of pre-trained models meant that I could build the whole app without running a single gradient update, or hand-labeling a single example.
 
-As for the timelines -- it definatelly took me more time than I anticipated, but actually most of the time was spent on non-ML issues (like figuring out how to add Unicode characters to a video frame).
+As for the timelines -- it definitely took me more time than I anticipated, but actually most of the time was spent on non-ML issues (like figuring out how to add Unicode characters to a video frame).
 
 Here's a 60s clip of an interview conducted in Polish, translated to English. You can see that we a very clean setup like this, the results actually look quite OK!
 
@@ -91,9 +91,9 @@ Once we have the sound extracted, we can process it with:
 
 There isn't much to say about [Whisper](https://github.com/openai/whisper), really. 
 
-It's a fantastic tool, which recognizes english speach better than me.
+It's a fantastic tool, which recognizes english speech better than me.
 
-It handles mutliple languages, and works okay even with overlapping speech.
+It handles multiple languages, and works okay even with overlapping speech.
 
 I've decided to feed the whole audio stream to `whisper` as a single input, but if you wanted to improve this part of the code, you could experiment with partitioning the audio for each speaker, but my bet is that this will not give any better results. 
 
@@ -139,7 +139,7 @@ I then turned to [NeMo](https://github.com/NVIDIA/NeMo), from good folks at `NVI
 
 In their words: "NVIDIA NeMo is a conversational AI toolkit built for researchers working on automatic speech recognition (ASR), text-to-speech synthesis (TTS), large language models (LLMs), and natural language processing (NLP)."
 
-I found it to be quite reliable, especially for english. It still struggles with short segments of overlapping speech, but it's definatelly good enough for the demo. 
+I found it to be quite reliable, especially for english. It still struggles with short segments of overlapping speech, but it's definitely good enough for the demo. 
 
 The biggest downside is that `NeMo` is a research toolkit. Therefore simple tasks like "give me unique IDs for this audio file" result in a code that is much more messy than the `PyAnnote` version. 
 
@@ -149,7 +149,7 @@ Note that I mainly tested it on rather high-quality, interview-type audio. I do 
 
 I used a simple heuristic here, where for every section of speech (output from `NeMo`) we find the phrase detected by `Whisper` with the largest overlap. 
 
-This part of the code could definatelly be improved with a more sofisticated approach. It would also be good to look more into the timestamps returned by the two systems, since for some reason I had an impression that an offset 
+This part of the code could definitely be improved with a more sophisticated approach. It would also be good to look more into the timestamps returned by the two systems, since for some reason I had an impression that an offset 
 
 ## 2.2 Handling video streams
 
@@ -157,7 +157,7 @@ This is pretty straightforward with `cv2` and `ffmpeg`. The main tip is that for
 
 ### 2.2.1 Detecting faces in video
 
-Detecting faces is luckily super straight-forward with modern tools like `RetinaFace` or `MTCNN`. 
+Detecting faces is luckily super straightforward with modern tools like `RetinaFace` or `MTCNN`. 
 
 In this first step we run a pre-trained model to detect all faces visible in each frame.
 
@@ -167,9 +167,9 @@ We then crop, align, and re-size them as required by the downstream embedding mo
     <img src="https://raw.githubusercontent.com/serengil/retinaface/master/tests/outputs/alignment-procedure.png" alt="Speaker Diarization example", width="75%"
 </p>
 
-This step is quite roboust and reliable, the only downside is that it relies on `Tensorflow`, and the code can only handle single frame at a time. 
+This step is quite robust and reliable, the only downside is that it relies on `Tensorflow`, and the code can only handle single frame at a time. 
 
-It's quite time-consuming to run this detection for every frame in a video, so this part of the code could definatelly use some optimizations.
+It's quite time-consuming to run this detection for every frame in a video, so this part of the code could definitely use some optimizations.
 
 With a modern GPU it takes several minutes to process ~60s of video.
 
@@ -191,7 +191,7 @@ This part of the code could be improved in many ways:
 - Improve the clustering algorithm by either
     - Using a different algorithm (e.g. DBSCAN)
     - Using more domain knowledge (e.g. the fact that faces with similar locations in consecutive frames are likely to be the same person, no two faces in a single frame can be a single person etc.)
-- Investigate if it would be a good idea to identify a couple of "best" frames where the face is in the best position, and use them as a tempalte.
+- Investigate if it would be a good idea to identify a couple of "best" frames where the face is in the best position, and use them as a template.
 - Enforce temporal consistency -- predictions should not be made for each frame in isolation. 
 - Improve the embeddings themselves, e.g. by using a combination of models, or different distance metrics?
 
@@ -235,7 +235,7 @@ Getting the frontend ready can be trivially done with [Gradio](https://gradio.ap
 
 We could try to deploy the model with [Huggingface Spaces](https://huggingface.co/docs/hub/spaces-sdks-gradio), but I wanted to try something a bit more "production-ready".
 
-I wen't ahead with [Modal](https://modal.com/) -- a serverless platform built by [Erik Bernhardsson](https://erikbern.com/) and his team. You can read more about it [in his blogpost](https://erikbern.com/2022/12/07/what-ive-been-working-on-modal.html)
+I went ahead with [Modal](https://modal.com/) -- a serverless platform built by [Erik Bernhardsson](https://erikbern.com/) and his team. You can read more about it [in his blog post](https://erikbern.com/2022/12/07/what-ive-been-working-on-modal.html)
 
 `Modal` is really appealing since it allows me to write the code exactly how I imagined the programming for the cloud should look like. What locally you'd write as:
 
@@ -278,7 +278,7 @@ This is very obviously just a demo / proof-of-concept!
 The main limitations are:
 - Processing 30s of video takes several minutes on a modern PC
 - The approach used here will not work well for clips with multiple scenes
-- Matching faces to voices relies on simple co-occurence heuristic, and will not work in certain scenarios (e.g. if the whole conversation between two people is recorded from a single angle)
+- Matching faces to voices relies on simple co-occurrence heuristic, and will not work in certain scenarios (e.g. if the whole conversation between two people is recorded from a single angle)
 - All the steps of the pipeline rely on imperfect tools (e.g. diarization) or simplistic heuristics (e.g. finding unique faces with agglomerative clustering)
 - The pipeline was only tested on a handful of examples
 
